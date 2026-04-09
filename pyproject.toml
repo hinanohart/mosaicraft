@@ -108,6 +108,8 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["B011"]
 "examples/*" = ["E402"]
+"scripts/generate_readme_figures.py" = ["E402", "I001"]
+"benchmarks/*" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "double"

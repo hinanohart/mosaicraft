@@ -13,11 +13,19 @@
 
 [Features](#-features) · [Quick Start](#-quick-start) · [Algorithm](#-algorithm) · [Presets](#-presets) · [Benchmarks](#-benchmarks) · [API](#-python-api) · [日本語](#-日本語)
 
+![Target vs mosaicraft output](docs/images/hero.jpg)
+
 </div>
 
 ---
 
 `mosaicraft` reproduces a target image as a grid of smaller tile images. Most photomosaic libraries use mean-color matching in RGB or HSV; mosaicraft works in **Oklab** perceptual color space with **MKL optimal transport** color transfer, **Hungarian** placement, and **Laplacian pyramid** boundary blending. The result is a mosaic that looks closer to the target *and* preserves the look of the individual tiles.
+
+> *The hero image above is reproducible end-to-end from this repository with no external assets:*
+> ```bash
+> python scripts/generate_readme_figures.py
+> ```
+> *The target, the tile pool, and every mosaic are synthesized procedurally and released under CC0.*
 
 ## ✨ Features
 
@@ -77,6 +85,10 @@ mosaicraft generate photo.jpg --cache-dir ./cache -o out.jpg --tile-size 88
 # 5. List all presets.
 mosaicraft presets
 ```
+
+![Before and after](docs/images/before_after.jpg)
+
+*1,600×1,200 target, 2,048-tile procedural pool, 3,072 cells, preset `ultra`.*
 
 ### Python API
 
@@ -166,6 +178,10 @@ CIELAB was designed for small color differences. For the *large* color jumps you
 
 Reinhard color transfer matches the *first and second moments* of the LAB distributions. MKL ([Pitié et al., 2007](https://www.researchgate.net/publication/220056262)) matches the *full covariance*, preserving the shape of the source distribution as it shifts toward the target. The result keeps the texture of the original tile while making it blend with the surrounding cells.
 
+![Zoom detail](docs/images/zoom_detail.jpg)
+
+*Left: the center 50% of the mosaic — at reading distance the landscape is recognizable. Right: a 2x nearest-neighbor zoom into the same region — every cell is a distinct tile from the procedural pool.*
+
 ## 🎨 Presets
 
 | Preset         | Best for                                              | Speed |
@@ -180,10 +196,26 @@ Reinhard color transfer matches the *first and second moments* of the LAB distri
 
 You can also pass a custom dict to `MosaicGenerator(preset={...})`. See [`presets.py`](src/mosaicraft/presets.py) for the full key list.
 
+![Preset comparison](docs/images/presets_comparison.jpg)
+
+*Same target, same tile pool, three presets — saturation and color-transfer behavior visibly diverge.*
+
 ## 📊 Benchmarks
 
-Run on the 64-tile synthetic test set used in the test suite.
-Real numbers depend heavily on tile pool size and grid resolution.
+### End-to-end wall time (cold start, 256-tile pool)
+
+Produced by `python benchmarks/benchmark_pipeline.py` — a single `MosaicGenerator` pass, tiles loaded from disk every time, no feature cache. Each run ends with the mosaic written to JPEG.
+
+| preset  | 200 cells | 500 cells | 1,000 cells |
+| ------- | --------: | --------: | ----------: |
+| fast    | 3.00 s    | 4.42 s    | 6.87 s      |
+| natural | 2.79 s    | 4.38 s    | 7.49 s      |
+| ultra   | 2.86 s    | 4.64 s    | 7.61 s      |
+| vivid   | 2.92 s    | 4.69 s    | 7.85 s      |
+
+<sub>AMD Ryzen 7 7735HS, WSL2 / Ubuntu 24.04, Python 3.12, NumPy + OpenCV wheels — no GPU, no FAISS. Rerun the script on your own machine to verify.</sub>
+
+### Per-stage breakdown (64-cell synthetic)
 
 | Stage                              | Wall time (synthetic) |
 | ---------------------------------- | --------------------: |
@@ -196,7 +228,20 @@ Real numbers depend heavily on tile pool size and grid resolution.
 | Postprocess                        | ~0.08 s               |
 | **Total (preset=ultra, 64 cells)** | **~0.3 s**            |
 
-A 5,000-cell mosaic from a 4,000-tile pool typically completes in 30–90 seconds on a modern laptop CPU. Pre-building the feature cache reduces tile load time from minutes to under one second.
+A 5,000-cell mosaic from a 4,000-tile pool typically completes in 30–90 seconds on a modern laptop CPU. Pre-building the feature cache with `mosaicraft cache` reduces tile load time from minutes to under one second on subsequent runs — the cold-start numbers above are a pessimistic floor.
+
+### Reproducible demo figures
+
+The figures in this README — the hero image, the before/after, the preset comparison, and the zoom detail — are produced by a single self-contained script using only procedural assets. Running it locally is the fastest way to sanity-check the pipeline on your own hardware:
+
+```bash
+python scripts/generate_readme_figures.py          # full resolution (~2 minutes)
+python scripts/generate_readme_figures.py --quick  # smaller, faster (~40 seconds)
+```
+
+The `docs/images/tiles_sample.jpg` thumbnail below shows a subset of the procedural tile pool — gradients, shape primitives, stripes, and checkerboards with perturbed HSV, all synthesized on the fly:
+
+![Procedural tile pool](docs/images/tiles_sample.jpg)
 
 ## 📚 Python API
 
@@ -266,7 +311,11 @@ mosaicraft builds on classic and modern color science:
 
 ## 🌐 日本語
 
+![ターゲット画像と mosaicraft 出力の比較](docs/images/before_after.jpg)
+
 `mosaicraft` は、画像をタイル写真の集合として再構成する**フォトモザイク**ジェネレータです。多くの既存ライブラリが RGB/HSV の平均色マッチングを使うのに対し、mosaicraft は **Oklab 知覚色空間** + **MKL 最適輸送色転写** + **ハンガリアン法による配置** + **ラプラシアンピラミッドブレンディング** を統合し、より精度の高いマッチングと自然な見た目を両立します。
+
+> 上の比較画像は `python scripts/generate_readme_figures.py` を実行するとリポジトリ内で完全に再現できます。ターゲット・タイル・モザイクすべて手続き的に生成する CC0 アセットで、外部の写真は一切使用していません。
 
 ### 特徴
 
@@ -323,6 +372,19 @@ result = gen.generate("photo.jpg", "mosaic.jpg", target_tiles=2000)
 | `vivid_max`    | 最大彩度 + 肌保護フル                                  |
 | `tile`         | タイル感を最大化                                       |
 | `fast`         | FAISS のみ。最速、品質は ultra より控えめ              |
+
+### ベンチマーク（実測値）
+
+AMD Ryzen 7 7735HS / WSL2 Ubuntu 24.04 / Python 3.12。256 タイルプールからのコールドスタート実測（特徴キャッシュ未使用）。
+
+| preset  | 200 セル | 500 セル | 1,000 セル |
+| ------- | -------: | -------: | ---------: |
+| fast    | 3.00 s   | 4.42 s   | 6.87 s     |
+| natural | 2.79 s   | 4.38 s   | 7.49 s     |
+| ultra   | 2.86 s   | 4.64 s   | 7.61 s     |
+| vivid   | 2.92 s   | 4.69 s   | 7.85 s     |
+
+`python benchmarks/benchmark_pipeline.py` でご自身の環境でも再実行可能です。`mosaicraft cache` で特徴キャッシュを事前構築すると、2 回目以降のタイル読み込みが数秒→1 秒未満に短縮されます。
 
 ### ライセンス
 

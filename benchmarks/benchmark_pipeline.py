@@ -21,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT))
 
-from mosaicraft import MosaicGenerator, configure_logging  # noqa: E402
+from mosaicraft import MosaicGenerator, configure_logging
 
 
 def ensure_assets() -> tuple[Path, Path]:

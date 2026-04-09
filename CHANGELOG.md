@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* `scripts/generate_readme_figures.py` — self-contained pipeline that builds a
+  CC0 procedural landscape target, a procedural tile pool, and renders
+  mosaics with three presets, then composites hero / before-after / preset
+  comparison / zoom detail / tile sample figures into `docs/images/`.
+* README now embeds visual examples (hero, before-after, zoom detail, preset
+  comparison, tile pool sample) and a measured end-to-end benchmark table
+  produced by `benchmarks/benchmark_pipeline.py` on AMD Ryzen 7 7735HS.
+* Japanese README section mirrors the English benchmark table.
+
 ## [0.1.0] - 2026-04-09
 
 ### Added
