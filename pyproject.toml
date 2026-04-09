@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mosaicraft"
-version = "0.1.0"
-description = "Perceptual photomosaic generator with Oklab color space, MKL optimal transport, and Laplacian pyramid blending"
+version = "0.2.0"
+description = "Perceptual photomosaic generator — Oklab color matching, MKL optimal transport, Hungarian placement, and Oklch tile-pool expansion + recoloring"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
@@ -16,8 +16,11 @@ keywords = [
     "image-processing",
     "computer-vision",
     "oklab",
+    "oklch",
     "perceptual-color",
     "optimal-transport",
+    "color-transfer",
+    "hungarian-algorithm",
     "art",
 ]
 classifiers = [

@@ -24,6 +24,7 @@ from pathlib import Path
 from . import __version__
 from .core import MosaicGenerator
 from .presets import get_preset, list_presets
+from .recolor import get_recolor_preset, list_recolor_presets, recolor
 from .tiles import build_cache
 from .utils import configure_logging, logger
 
@@ -102,6 +103,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Disable tile augmentation when loading",
     )
     g.add_argument(
+        "--color-variants",
+        type=int,
+        default=0,
+        help=(
+            "Expand the tile pool by N Oklch hue-rotated variants per tile. "
+            "For a pool of 1,000 tiles and --color-variants 4 you get 5,000 "
+            "candidates (diversity ceiling ~5x higher). Default: 0 (off)."
+        ),
+    )
+    g.add_argument(
         "--jpeg-quality",
         type=int,
         default=95,
@@ -141,8 +152,74 @@ def build_parser() -> argparse.ArgumentParser:
         help="Thumbnail size to store in the cache (default: 120)",
     )
 
+    # recolor
+    r = sub.add_parser(
+        "recolor",
+        help="Recolor an image perceptually in Oklch (hue rotation + chroma)",
+    )
+    r.add_argument("input", type=Path, help="Input image path")
+    r.add_argument("-o", "--output", type=Path, required=True, help="Output image path")
+    group = r.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "-p",
+        "--preset",
+        choices=list_recolor_presets(),
+        help="Named recolor preset (e.g. blue, sepia, cyberpunk)",
+    )
+    group.add_argument(
+        "--hex",
+        dest="target_hex",
+        help="Target color as #RRGGBB (any valid sRGB color)",
+    )
+    group.add_argument(
+        "--hue",
+        dest="hue_shift_deg",
+        type=float,
+        help="Relative hue rotation in degrees (e.g. 60, -30)",
+    )
+    r.add_argument(
+        "--chroma",
+        dest="chroma_scale",
+        type=float,
+        default=None,
+        help="Override chroma scale (0.0 = grayscale, 1.0 = keep, >1 = boost)",
+    )
+    r.add_argument(
+        "--lightness-gamma",
+        type=float,
+        default=None,
+        help="Override lightness gamma (<1 lifts shadows, >1 deepens midtones)",
+    )
+    r.add_argument(
+        "--strength",
+        type=float,
+        default=1.0,
+        help="Blend factor 0-1 (default: 1.0 = full recolor)",
+    )
+    r.add_argument(
+        "--no-protect-highlights",
+        dest="protect_highlights",
+        action="store_false",
+        help="Do not fade chroma in highlights",
+    )
+    r.add_argument(
+        "--no-protect-shadows",
+        dest="protect_shadows",
+        action="store_false",
+        help="Do not fade chroma in shadows",
+    )
+    r.add_argument(
+        "--jpeg-quality",
+        type=int,
+        default=95,
+        help="JPEG quality 1-100 (default: 95)",
+    )
+
     # presets
-    sub.add_parser("presets", help="List available presets")
+    sub.add_parser("presets", help="List available mosaic presets")
+
+    # recolor-presets
+    sub.add_parser("recolor-presets", help="List available recolor presets")
 
     return parser
 
@@ -156,6 +233,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         cache_dir=args.cache_dir,
         preset=args.preset,
         augment=not args.no_augment,
+        color_variants=args.color_variants,
         hungarian_mem_limit_mb=args.mem_limit_mb,
     )
     result = gen.generate(
@@ -197,6 +275,32 @@ def _cmd_presets(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_recolor_presets(_args: argparse.Namespace) -> int:
+    print("Available recolor presets:\n")
+    for name in list_recolor_presets():
+        p = get_recolor_preset(name)
+        print(f"  {name:12s} - {p.description}")
+    return 0
+
+
+def _cmd_recolor(args: argparse.Namespace) -> int:
+    recolor(
+        args.input,
+        args.output,
+        preset=args.preset,
+        target_hex=args.target_hex,
+        hue_shift_deg=args.hue_shift_deg,
+        chroma_scale=args.chroma_scale,
+        lightness_gamma=args.lightness_gamma,
+        strength=args.strength,
+        protect_highlights=args.protect_highlights,
+        protect_shadows=args.protect_shadows,
+        jpeg_quality=args.jpeg_quality,
+    )
+    logger.info("Wrote %s", args.output)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -208,6 +312,10 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_cache(args)
         if args.command == "presets":
             return _cmd_presets(args)
+        if args.command == "recolor":
+            return _cmd_recolor(args)
+        if args.command == "recolor-presets":
+            return _cmd_recolor_presets(args)
         parser.error(f"Unknown command: {args.command}")
     except KeyboardInterrupt:
         logger.error("Interrupted")

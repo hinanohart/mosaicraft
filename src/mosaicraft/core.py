@@ -22,6 +22,7 @@ import cv2
 import numpy as np
 
 from .blending import assemble_feather, assemble_laplacian
+from .color_augment import expand_color_variants
 from .features import extract_features
 from .placement import (
     compute_cost_matrix,
@@ -77,6 +78,13 @@ class MosaicGenerator:
         Whether to apply geometric/photometric augmentations when loading
         tiles. Ignored when reading from a cache (the cache always contains
         augmented features).
+    color_variants : int
+        Number of Oklch hue-rotated copies to add per tile after the base
+        augmentation, growing the effective pool ``(1 + color_variants)x``.
+        ``0`` (the default) matches pre-0.2 behavior. Rotations are applied
+        to the already-augmented tile pool, so ``color_variants=4`` on a
+        1,024-tile pool with ``augment=True`` yields ``1024 * 4 * 5 = 20,480``
+        candidates — a 5x diversity ceiling for Hungarian placement.
     hungarian_mem_limit_mb : float
         Cost matrix size cap; above this, FAISS placement is used.
     """
@@ -88,6 +96,7 @@ class MosaicGenerator:
         cache_dir: str | os.PathLike[str] | None = None,
         preset: str | dict[str, Any] = "ultra",
         augment: bool = True,
+        color_variants: int = 0,
         hungarian_mem_limit_mb: float = DEFAULT_HUNGARIAN_MEM_LIMIT_MB,
     ) -> None:
         if tile_dir is None and cache_dir is None:
@@ -98,6 +107,7 @@ class MosaicGenerator:
             get_preset(preset) if isinstance(preset, str) else dict(preset)
         )
         self.augment = augment
+        self.color_variants = int(color_variants)
         self.hungarian_mem_limit_mb = hungarian_mem_limit_mb
         self._tile_cache: dict[int, TileSet] = {}
 
@@ -122,6 +132,16 @@ class MosaicGenerator:
                 tileset = load_tiles(self.tile_dir, tile_size)
                 if self.augment:
                     tileset = augment_tiles(tileset, tile_size)
+
+        if self.color_variants > 0:
+            with stage(
+                f"Expanding color variants (x{self.color_variants} hue rotations)"
+            ):
+                tileset = expand_color_variants(
+                    tileset,
+                    n_variants=self.color_variants,
+                    tile_size=tile_size,
+                )
 
         logger.info("Loaded %d tiles", len(tileset))
         self._tile_cache[tile_size] = tileset

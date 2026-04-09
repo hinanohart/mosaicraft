@@ -7,8 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-10
+
 ### Added
 
+* **Oklch tile-pool expansion** (`mosaicraft.color_augment`, new module).
+  `MosaicGenerator(color_variants=N)` and the CLI flag `--color-variants N`
+  rotate every tile through N evenly-spaced Oklch hue shifts (default
+  schedule 72° / 144° / 216° / 288°) to expand the candidate pool by (N+1)×
+  with zero new photographs. Lightness is preserved exactly, so per-tile
+  texture and shading survive the rotation. Exposes `rotate_hue_oklch` and
+  `expand_color_variants` from the top-level package.
+* **Oklch whole-image recoloring** (`mosaicraft.recolor`, new module). The
+  `recolor()` function and `mosaicraft recolor` CLI subcommand rotate a
+  finished mosaic through 21 named presets (`blue`, `cyan`, `teal`,
+  `purple`, `pink`, `sepia`, `cyberpunk`, ...) or any `#RRGGBB` target,
+  preserving the Oklab L channel exactly so the result has no boundary
+  artifacts. Supports strength blending, highlight/shadow chroma protection,
+  relative hue shifts, and lightness gamma overrides.
 * `scripts/download_demo_assets.py` — bootstraps ~8 MB of public-domain demo
   assets: four Wikimedia Commons paintings (Vermeer's *Girl with a Pearl
   Earring*, Van Gogh's *Starry Night*, Hokusai's *Great Wave off Kanagawa*
@@ -20,31 +36,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   compares mosaicraft (`fast` and `ultra` presets) against two reference
   OSS photomosaic tools ([codebox/mosaic](https://github.com/codebox/mosaic)
   and [photomosaic 0.3.1](https://pypi.org/project/photomosaic/)) on an
-  identical target, tile pool, and grid. Emits a 5-panel comparison figure
-  to `docs/images/comparison.jpg` plus `docs/assets/bench_outputs/metrics.json`
-  with SSIM, ΔE2000 (CIEDE2000), edge correlation, cell diversity, and wall
-  time. Includes a monkey-patch shim so `photomosaic 0.3.1` (skimage-era)
-  runs on modern NumPy / scikit-image.
-* `scripts/generate_readme_figures.py` — rewritten to render hero,
-  before/after, preset comparison, zoom detail, tile-pool sample, and a
-  4-painting gallery figure from the real bootstrapped assets. Adds a
+  identical target, tile pool, and grid. Emits a comparison figure to
+  `docs/images/comparison.jpg` plus `docs/assets/bench_outputs/metrics.json`
+  with SSIM, blurred SSIM, ΔE2000 (CIEDE2000), edge correlation, cell
+  diversity, LPIPS, and wall time. Includes a monkey-patch shim so
+  `photomosaic 0.3.1` (skimage-era) runs on modern NumPy / scikit-image.
+* `benchmarks/benchmark_pipeline.py --scale large` — 5k / 10k / 20k / 30k
+  cell regime against the 1,024-image CC0 pool, up to 8,904 × 10,472 px
+  (~93 megapixels).
+* `scripts/generate_readme_figures.py` — renders hero, before/after, preset
+  comparison, zoom detail, tile-pool sample, 4-painting gallery, and the
+  9-preset Oklch recolor gallery from the real bootstrapped assets. Adds a
   `--target {pearl_earring,starry_night,great_wave,red_fuji}` flag.
-* README: new "Comparison with other photomosaic tools" section (plus
-  Japanese mirror) with a metrics table and a plain-language explanation of
-  the fundamental tradeoff between pixel-fidelity and tile-diversity
-  optimization. Image Credits section lists every public-domain / CC0
-  source. All existing captions updated to reference the real Wikimedia
-  paintings.
+* README: new sections for `--color-variants`, Oklch recoloring, the large
+  benchmark regime, and a rewritten Comparison section with blurred SSIM +
+  LPIPS added to the metric table. English is now the primary README and
+  Japanese has moved to `README.ja.md`.
 * `docs/assets/MANIFEST.json` committed; the raw image files under
   `docs/assets/{paintings,tiles,bench_outputs}/` are gitignored and
   reproducible via `python scripts/download_demo_assets.py`.
 
 ### Changed
 
+* Presets consolidated from seven to five (`ultra`, `natural`, `vivid`,
+  `tile`, `fast`). The old `vivid_strong` and `vivid_max` were collapsed
+  into `vivid` with skin protection always on.
+* LPIPS and blurred SSIM added to the `compare_tools.py` metric set. The
+  README comparison section is now honest about the pixel-fidelity trade-off
+  rather than leading with a metric mosaicraft wins by construction.
 * Dropped the procedural CC0 landscape / procedural tile pool used in the
-  previous README figures. The recognisable public-domain paintings and the
-  real photograph tile pool are a better showcase of mosaicraft's Hungarian
-  + MKL + Oklab pipeline.
+  previous README figures in favor of Wikimedia Commons paintings and the
+  1,024-image CC0 photograph pool.
 
 ## [0.1.0] - 2026-04-09
 

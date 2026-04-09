@@ -1,14 +1,33 @@
 """Compare mosaicraft against other open-source photomosaic generators.
 
 Runs four tools on the same (target, tile-pool) pair and reports wall time
-plus three reference-free quality metrics:
+plus a mix of pixel-level and perceptual quality metrics.
+
+Pixel-level (included for completeness; penalise photomosaics that
+intentionally inject tile-level detail):
 
   * **SSIM** — Structural similarity vs the target (higher is better).
-    Captures structural fidelity at a local/perceptual level.
   * **ΔE2000** — CIEDE2000 mean colour error in CIELAB (lower is better).
-    Industry-standard perceptual colour distance; what print shops use.
   * **Edge-corr** — Pearson correlation between target and mosaic Sobel edge
-    maps (higher is better). Measures how much fine structure survives.
+    maps (higher is better).
+
+Perceptual (correlate with human judgement and with how photomosaics are
+actually viewed — step back and look):
+
+  * **SSIM_blur** — SSIM after Gaussian blur of both images with σ ≈ 2% of
+    the image diagonal. Approximates "view from reading distance"; a
+    well-made photomosaic should score high here even if it loses pixel SSIM.
+  * **LPIPS (AlexNet)** — Learned Perceptual Image Patch Similarity
+    (Zhang et al., CVPR 2018). Deep-feature distance; lower is better.
+    LPIPS correlates with human two-alternative forced-choice judgements far
+    better than SSIM/PSNR, and is the standard reference metric for
+    generative image quality.
+
+Photomosaic-specific:
+
+  * **Cell diversity** — fraction of grid cells whose mean colour is
+    distinct after 5-bit quantisation (higher = more of the tile pool is
+    actually being used). Photomosaics are meant to *use* the pool.
 
 Tools under test (all invoked from a clean subprocess / fresh Python context):
 
@@ -146,6 +165,73 @@ def cell_diversity(mosaic_bgr: np.ndarray, n_grid: int) -> float:
     return len(means) / total if total else 0.0
 
 
+def blurred_ssim_rgb(a_rgb: np.ndarray, b_rgb: np.ndarray) -> float:
+    """SSIM computed after Gaussian blurring both target and mosaic.
+
+    Photomosaics are designed to be recognisable at reading distance, not
+    pixel-identical at 100% zoom. We blur with σ ≈ 2% of the longest side —
+    the same rule graphic designers use when simulating "step back and look"
+    — and compute SSIM on the blurred pair. This is the evaluation mode that
+    best matches how a photomosaic is actually consumed.
+    """
+    sigma = max(1.0, 0.02 * float(max(a_rgb.shape[:2])))
+    ksize = int(2 * round(3 * sigma) + 1)
+    a_blur = cv2.GaussianBlur(a_rgb, (ksize, ksize), sigma)
+    b_blur = cv2.GaussianBlur(b_rgb, (ksize, ksize), sigma)
+    return ssim_rgb(a_blur, b_blur)
+
+
+# Lazy singleton — torch and lpips are heavy; only initialise if the metric
+# is actually requested.
+_LPIPS_MODEL: Any = None
+
+
+def _get_lpips_model() -> Any:
+    global _LPIPS_MODEL
+    if _LPIPS_MODEL is None:
+        import lpips  # type: ignore[import-untyped]
+        import torch  # type: ignore[import-untyped]
+
+        # net='alex' is the fast/accurate combination recommended by the
+        # original paper (Zhang et al. 2018) for image quality benchmarking.
+        model = lpips.LPIPS(net="alex", verbose=False)
+        model.eval()
+        torch.set_num_threads(max(1, (os.cpu_count() or 2) // 2))
+        _LPIPS_MODEL = model
+    return _LPIPS_MODEL
+
+
+def lpips_distance(a_rgb: np.ndarray, b_rgb: np.ndarray) -> float:
+    """LPIPS (AlexNet) distance between two RGB uint8 images.
+
+    Returns a float in ``[0, ~1]`` — 0 means identical, higher is worse.
+    LPIPS correlates with human two-alternative forced-choice perceptual
+    judgements far better than SSIM or PSNR (Zhang et al., CVPR 2018:
+    https://arxiv.org/abs/1801.03924).
+
+    Operates on 256-px downsampled copies for speed; the conv features are
+    translation-invariant so this is a negligible accuracy loss.
+    """
+    try:
+        import torch  # type: ignore[import-untyped]
+    except ImportError:
+        return float("nan")
+
+    model = _get_lpips_model()
+    # Resize to a fixed 256 so the metric is comparable across image sizes.
+    target_side = 256
+    small_a = cv2.resize(a_rgb, (target_side, target_side), interpolation=cv2.INTER_AREA)
+    small_b = cv2.resize(b_rgb, (target_side, target_side), interpolation=cv2.INTER_AREA)
+
+    def _prep(x: np.ndarray) -> Any:
+        t = torch.from_numpy(x).float().permute(2, 0, 1)[None] / 127.5 - 1.0
+        return t
+
+    with torch.no_grad():
+        dist = model(_prep(small_a), _prep(small_b)).item()
+    return float(dist)
+
+
 def compute_metrics(
     target_bgr: np.ndarray, mosaic_bgr: np.ndarray, n_grid: int
 ) -> dict[str, float]:
@@ -156,9 +242,11 @@ def compute_metrics(
     b = _to_uint8_rgb(resized)
     return {
         "ssim": ssim_rgb(a, b),
+        "ssim_blurred": blurred_ssim_rgb(a, b),
         "delta_e2000_mean": delta_e_mean(a, b),
         "edge_corr": edge_correlation(a, b),
         "cell_diversity": cell_diversity(mosaic_bgr, n_grid),
+        "lpips": lpips_distance(a, b),
     }
 
 
@@ -183,9 +271,15 @@ def run_mosaicraft(
     tiles_dir: Path,
     grid_tiles: int,
     out_path: Path,
+    *,
+    color_variants: int = 0,
 ) -> tuple[float, Path]:
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    gen = MosaicGenerator(tile_dir=tiles_dir, preset=preset)
+    gen = MosaicGenerator(
+        tile_dir=tiles_dir,
+        preset=preset,
+        color_variants=color_variants,
+    )
     t0 = time.perf_counter()
     gen.generate(target_path, out_path, target_tiles=grid_tiles, tile_size=64)
     return time.perf_counter() - t0, out_path
@@ -330,12 +424,12 @@ def run_codebox_mosaic(
     env = os.environ.copy()
     t0 = time.perf_counter()
     proc = subprocess.run(
-        [sys.executable, "mosaic.py", str(codebox_target), str(tiles_dir)],
+        [sys.executable, "mosaic.py", str(codebox_target.resolve()), str(tiles_dir.resolve())],
         cwd=work,
         env=env,
         capture_output=True,
         text=True,
-        timeout=600,
+        timeout=1800,
     )
     elapsed = time.perf_counter() - t0
     if proc.returncode != 0:
@@ -377,6 +471,11 @@ TOOLS: list[dict[str, Any]] = [
         "label": "mosaicraft ultra\n(Oklab + Hungarian)",
         "runner": "mosaicraft_ultra",
     },
+    {
+        "id": "mosaicraft_ultra_cv4",
+        "label": "mosaicraft ultra + cv4\n(Oklch pool x5)",
+        "runner": "mosaicraft_ultra_cv4",
+    },
 ]
 
 
@@ -401,6 +500,10 @@ def make_runner(
         return "mosaicraft_ultra", lambda: run_mosaicraft(
             "ultra", target_path, TILES_DIR, grid * grid, out_path
         )
+    if runner_id == "mosaicraft_ultra_cv4":
+        return "mosaicraft_ultra_cv4", lambda: run_mosaicraft(
+            "ultra", target_path, TILES_DIR, grid * grid, out_path, color_variants=4
+        )
     raise ValueError(f"unknown runner {runner_id}")
 
 
@@ -424,12 +527,13 @@ def _label_panel(img: np.ndarray, title: str, metrics: dict[str, float]) -> np.n
         cv2.putText(canvas, ln, (12, y), font, 0.75, (20, 20, 20), 2, cv2.LINE_AA)
         y += 28
     if metrics:
-        line1 = "time {t:.1f}s   SSIM {s:.3f}   edge {e:.3f}".format(
+        line1 = "time {t:.1f}s   LPIPS {l:.3f}   SSIM_blur {sb:.3f}".format(
             t=metrics.get("elapsed_sec", 0.0),
-            s=metrics.get("ssim", 0.0),
-            e=metrics.get("edge_corr", 0.0),
+            l=metrics.get("lpips", 0.0),
+            sb=metrics.get("ssim_blurred", 0.0),
         )
-        line2 = "dE2000 {d:.1f}   diversity {v:.2f}".format(
+        line2 = "SSIM {s:.3f}   dE2000 {d:.1f}   diversity {v:.2f}".format(
+            s=metrics.get("ssim", 0.0),
             d=metrics.get("delta_e2000_mean", 0.0),
             v=metrics.get("cell_diversity", 0.0),
         )
@@ -485,17 +589,21 @@ def format_markdown_table(target_name: str, grid: int, results: list[ToolResult]
     lines = [
         f"### Photomosaic tool comparison — target = {target_name}, grid = {grid}×{grid}",
         "",
-        "| tool | wall time | SSIM ↑ | ΔE2000 ↓ | edge corr ↑ | cell diversity ↑ |",
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "| tool | time | LPIPS ↓ | SSIM_blur ↑ | SSIM ↑ | ΔE2000 ↓ | edge ↑ | diversity ↑ |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for r in results:
         if r.error:
-            lines.append(f"| {r.tool_id} | — | — | — | — | — _(error: {r.error[:60]})_ |")
+            lines.append(
+                f"| {r.tool_id} | — | — | — | — | — | — | — _(error: {r.error[:60]})_ |"
+            )
             continue
         lines.append(
-            "| {tool} | {t:.2f}s | {s:.3f} | {d:.2f} | {e:.3f} | {v:.3f} |".format(
+            "| {tool} | {t:.1f}s | {l:.3f} | {sb:.3f} | {s:.3f} | {d:.2f} | {e:.3f} | {v:.3f} |".format(
                 tool=r.tool_id.replace("_", " "),
                 t=r.elapsed_sec,
+                l=r.metrics.get("lpips", float("nan")),
+                sb=r.metrics.get("ssim_blurred", float("nan")),
                 s=r.metrics.get("ssim", float("nan")),
                 d=r.metrics.get("delta_e2000_mean", float("nan")),
                 e=r.metrics.get("edge_corr", float("nan")),
@@ -598,11 +706,12 @@ def main() -> int:
             continue
         result.metrics = compute_metrics(target_bgr, mosaic_bgr, grid)
         print(
-            "  done: {t:.2f}s  SSIM={s:.3f}  ΔE={d:.2f}  edge={e:.3f}  div={v:.3f}".format(
+            "  done: {t:.1f}s  LPIPS={l:.3f}  SSIM_blur={sb:.3f}  SSIM={s:.3f}  ΔE={d:.2f}  div={v:.3f}".format(
                 t=elapsed,
+                l=result.metrics["lpips"],
+                sb=result.metrics["ssim_blurred"],
                 s=result.metrics["ssim"],
                 d=result.metrics["delta_e2000_mean"],
-                e=result.metrics["edge_corr"],
                 v=result.metrics["cell_diversity"],
             )
         )
