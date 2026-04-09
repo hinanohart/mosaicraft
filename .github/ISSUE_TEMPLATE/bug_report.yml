@@ -1,0 +1,76 @@
+name: Bug report
+description: Report a reproducible problem in mosaicraft
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. The more detail you give,
+        the faster we can help.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: When I run `mosaicraft generate ...`, it crashes with ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: |
+        Minimal command or Python snippet that triggers the bug. If possible,
+        use the demo assets from `examples/basic.py` so we can reproduce locally.
+      render: shell
+      placeholder: |
+        python examples/basic.py
+        # or
+        mosaicraft generate target.jpg out.jpg --tile-dir tiles/ --preset ultra
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output / traceback
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: mosaicraft version
+      placeholder: "0.1.0 (or commit SHA)"
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.12.3"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Ubuntu 24.04 / macOS 14.5 / Windows 11"
+    validations:
+      required: true
+
+  - type: textarea
+    id: extras
+    attributes:
+      label: Anything else?
+      description: Tile count, target size, FAISS installed?, GPU?, etc.
