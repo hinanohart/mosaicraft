@@ -11,7 +11,7 @@
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Tests](https://img.shields.io/badge/tests-47%20passing-brightgreen.svg)](#testing)
 
-[Features](#-features) · [Quick Start](#-quick-start) · [Algorithm](#-algorithm) · [Presets](#-presets) · [Benchmarks](#-benchmarks) · [API](#-python-api) · [日本語](#-日本語)
+[Features](#-features) · [Quick Start](#-quick-start) · [Algorithm](#-algorithm) · [Comparison](#-comparison-with-other-photomosaic-tools) · [Presets](#-presets) · [Benchmarks](#-benchmarks) · [API](#-python-api) · [日本語](#-日本語)
 
 ![Target vs mosaicraft output](docs/images/hero.jpg)
 
@@ -21,11 +21,12 @@
 
 `mosaicraft` reproduces a target image as a grid of smaller tile images. Most photomosaic libraries use mean-color matching in RGB or HSV; mosaicraft works in **Oklab** perceptual color space with **MKL optimal transport** color transfer, **Hungarian** placement, and **Laplacian pyramid** boundary blending. The result is a mosaic that looks closer to the target *and* preserves the look of the individual tiles.
 
-> *The hero image above is reproducible end-to-end from this repository with no external assets:*
+> *The hero image is reproducible end-to-end from this repository. Bootstrap the demo assets once, then render:*
 > ```bash
-> python scripts/generate_readme_figures.py
+> python scripts/download_demo_assets.py       # ~8 MB of public-domain paintings + CC0 tiles
+> python scripts/generate_readme_figures.py    # writes docs/images/*.jpg
 > ```
-> *The target, the tile pool, and every mosaic are synthesized procedurally and released under CC0.*
+> *Target: Johannes Vermeer, **Girl with a Pearl Earring** (c. 1665, public domain, Wikimedia Commons). Tile pool: 1,024 CC0 photographs via picsum.photos (Unsplash License). See [Image credits](#-image-credits).*
 
 ## ✨ Features
 
@@ -88,7 +89,7 @@ mosaicraft presets
 
 ![Before and after](docs/images/before_after.jpg)
 
-*1,600×1,200 target, 2,048-tile procedural pool, 3,072 cells, preset `ultra`.*
+*Target: Vermeer, *Girl with a Pearl Earring* (1,366×1,600 px). 1,024-image CC0 tile pool × 4 augmentations. 52×61 = 3,172 cells. Preset `ultra`.*
 
 ### Python API
 
@@ -180,7 +181,32 @@ Reinhard color transfer matches the *first and second moments* of the LAB distri
 
 ![Zoom detail](docs/images/zoom_detail.jpg)
 
-*Left: the center 50% of the mosaic — at reading distance the landscape is recognizable. Right: a 2x nearest-neighbor zoom into the same region — every cell is a distinct tile from the procedural pool.*
+*Left: the center 50% of the mosaic — at reading distance the painting is recognizable. Right: a 2× nearest-neighbor zoom into the same region — every cell is a distinct CC0 photograph from the tile pool.*
+
+## 🆚 Comparison with other photomosaic tools
+
+`benchmarks/compare_tools.py` runs mosaicraft side-by-side with two reference OSS photomosaic tools against the same Wikimedia public-domain target (Vermeer, *Girl with a Pearl Earring*), the same 1,024-image CC0 tile pool (Unsplash License via picsum.photos), and an identical 40×40 grid. The output figure and the raw metrics file are committed under `docs/assets/bench_outputs/`.
+
+![Side-by-side comparison](docs/images/comparison.jpg)
+
+| Tool                                                                           | Wall time | SSIM ↑ | ΔE2000 ↓ | Edge corr ↑ | Cell diversity ↑ |
+| ------------------------------------------------------------------------------ | --------: | -----: | -------: | ----------: | ---------------: |
+| [codebox/mosaic](https://github.com/codebox/mosaic) (naive RGB mean)           |   1.57 s  |  0.250 |    10.32 |       0.209 |            0.079 |
+| [photomosaic 0.3.1](https://pypi.org/project/photomosaic/) (CIELAB + kd-tree)  |   2.09 s  |  0.068 |    37.18 |      −0.079 |            0.110 |
+| **mosaicraft — `fast`** (Oklab + 191-D features + FAISS)                       |  16.3  s  |  0.217 |    10.80 |       0.165 |        **0.339** |
+| **mosaicraft — `ultra`** (Oklab + MKL OT + Hungarian + NCC/SSIM + Laplacian)   |  20.1  s  |  0.166 |    13.84 |       0.106 |        **0.367** |
+
+<sub>SSIM and ΔE2000 (CIEDE2000) are computed against the original painting. Edge correlation is the Pearson correlation of Sobel-gradient magnitudes between target and mosaic. Cell diversity is the fraction of unique 5-bit-quantized cell means across the mosaic — higher means the mosaic uses more of the tile pool's variety. Rerun on your own machine with `python benchmarks/compare_tools.py --target pearl_earring --grid 40`.</sub>
+
+### How to read these numbers
+
+Photomosaic tools aren't all optimizing for the same thing, and the metrics make the tradeoff explicit:
+
+- **codebox** wins on raw pixel fidelity (SSIM, ΔE2000) because it uses low-pass mean-color matching with no constraint on tile reuse. That produces the smoothest pixel reproduction but reuses a tiny fraction of the pool — only **7.9%** of its cells are visually distinct.
+- **photomosaic 0.3.1** (2018-era CIELAB + kd-tree) loses on every metric here because its default pipeline expects much larger tile pools than this 1,024-image benchmark allows, and its skimage-era codepaths needed a compatibility shim to even run on modern NumPy. It is included as a historical baseline.
+- **mosaicraft** enforces strict one-to-one Hungarian assignment between cells and augmented tiles, then post-processes with MKL optimal transport, Oklch vibrance, and saturation. That shifts the output *away* from the target pixel values on purpose, in exchange for **4–5× higher cell diversity**: every cell of a mosaicraft output is a meaningfully different photograph, which is the entire point of a photomosaic. At reading distance the target is clearly recognizable; at arm's length every tile is its own image.
+
+**tl;dr**: if you want the closest possible pixel match, use a low-pass tool. If you want a photomosaic that *looks like a photomosaic* — where the tiles are recognizable under close inspection — mosaicraft is doing something different on purpose.
 
 ## 🎨 Presets
 
@@ -232,16 +258,31 @@ A 5,000-cell mosaic from a 4,000-tile pool typically completes in 30–90 second
 
 ### Reproducible demo figures
 
-The figures in this README — the hero image, the before/after, the preset comparison, and the zoom detail — are produced by a single self-contained script using only procedural assets. Running it locally is the fastest way to sanity-check the pipeline on your own hardware:
+Every figure in this README — hero, before/after, preset comparison, zoom detail, paintings gallery, and the side-by-side comparison against other tools — is produced by two self-contained scripts that bootstrap ~8 MB of public-domain demo assets on first run:
 
 ```bash
-python scripts/generate_readme_figures.py          # full resolution (~2 minutes)
-python scripts/generate_readme_figures.py --quick  # smaller, faster (~40 seconds)
+# 1. Download public-domain demo assets (~8 MB, one time).
+#    Writes docs/assets/MANIFEST.json with per-file SHA256 for integrity.
+python scripts/download_demo_assets.py
+
+# 2. Render README figures from the bootstrapped assets.
+python scripts/generate_readme_figures.py                       # full resolution
+python scripts/generate_readme_figures.py --quick               # faster iteration
+python scripts/generate_readme_figures.py --target starry_night # swap the hero painting
+
+# 3. Run the side-by-side benchmark against other OSS photomosaic tools.
+python benchmarks/compare_tools.py --target pearl_earring --grid 40
 ```
 
-The `docs/images/tiles_sample.jpg` thumbnail below shows a subset of the procedural tile pool — gradients, shape primitives, stripes, and checkerboards with perturbed HSV, all synthesized on the fly:
+Asset integrity is verified against `docs/assets/MANIFEST.json` via SHA256 — rerun `python scripts/download_demo_assets.py --verify-only` any time to check.
 
-![Procedural tile pool](docs/images/tiles_sample.jpg)
+![Tile pool sample](docs/images/tiles_sample.jpg)
+
+*A stride-sampled thumbnail of the 1,024-image CC0 tile pool (Unsplash License via picsum.photos).*
+
+![Public-domain paintings gallery](docs/images/paintings_gallery.jpg)
+
+*All four public-domain targets the scripts can feature — swap with `--target {pearl_earring,starry_night,great_wave,red_fuji}`.*
 
 ## 📚 Python API
 
@@ -297,6 +338,21 @@ Bug reports, feature requests, and pull requests are welcome. See [CONTRIBUTING.
 
 MIT License — see [LICENSE](LICENSE).
 
+## 🖼 Image credits
+
+Every demo figure in this README is reproducible from public-domain / CC0 sources:
+
+**Target paintings** — public domain (pre-1929), via [Wikimedia Commons](https://commons.wikimedia.org/):
+
+- Johannes Vermeer, *Girl with a Pearl Earring* (c. 1665)
+- Vincent van Gogh, *The Starry Night* (1889)
+- Katsushika Hokusai, *The Great Wave off Kanagawa* (c. 1831)
+- Katsushika Hokusai, *Fine Wind, Clear Morning (Red Fuji)* (c. 1831)
+
+**Tile pool** — 1,024 photographs from [picsum.photos](https://picsum.photos) (Unsplash-sourced, [Unsplash License](https://unsplash.com/license) — free for any use, attribution appreciated but not required).
+
+Per-file SHA256 and license metadata are pinned in [`docs/assets/MANIFEST.json`](docs/assets/MANIFEST.json), which is committed to the repository; the raw image files are not. Run `python scripts/download_demo_assets.py` to fetch them and `--verify-only` to check integrity.
+
 ## 🙏 Acknowledgments
 
 mosaicraft builds on classic and modern color science:
@@ -315,7 +371,12 @@ mosaicraft builds on classic and modern color science:
 
 `mosaicraft` は、画像をタイル写真の集合として再構成する**フォトモザイク**ジェネレータです。多くの既存ライブラリが RGB/HSV の平均色マッチングを使うのに対し、mosaicraft は **Oklab 知覚色空間** + **MKL 最適輸送色転写** + **ハンガリアン法による配置** + **ラプラシアンピラミッドブレンディング** を統合し、より精度の高いマッチングと自然な見た目を両立します。
 
-> 上の比較画像は `python scripts/generate_readme_figures.py` を実行するとリポジトリ内で完全に再現できます。ターゲット・タイル・モザイクすべて手続き的に生成する CC0 アセットで、外部の写真は一切使用していません。
+> 上の比較画像はリポジトリ内で完全に再現可能です:
+> ```bash
+> python scripts/download_demo_assets.py       # 公開画像アセットを一度DL（約8MB）
+> python scripts/generate_readme_figures.py    # docs/images/*.jpg を生成
+> ```
+> ターゲット画像は **フェルメール「真珠の耳飾りの少女」**（c. 1665、パブリックドメイン、Wikimedia Commons）、タイルプールは **picsum.photos** の CC0 写真 1,024 枚（Unsplash License）。詳細は [Image credits](#-image-credits) を参照。
 
 ### 特徴
 
@@ -373,6 +434,23 @@ result = gen.generate("photo.jpg", "mosaic.jpg", target_tiles=2000)
 | `tile`         | タイル感を最大化                                       |
 | `fast`         | FAISS のみ。最速、品質は ultra より控えめ              |
 
+### 既存 OSS ツールとの比較
+
+`benchmarks/compare_tools.py` で Wikimedia の公開画像（フェルメール「真珠の耳飾りの少女」）をターゲットに、mosaicraft と 2 本の参考 OSS フォトモザイクツールを、同じ 1,024 枚 CC0 タイルプール（picsum.photos 経由の Unsplash License）・同じ 40×40 グリッドで走らせた結果が下表です。生成された比較画像と生メトリクスは `docs/assets/bench_outputs/` にコミットされています。
+
+![比較図](docs/images/comparison.jpg)
+
+| ツール                                                                       | 所要時間 | SSIM ↑ | ΔE2000 ↓ | Edge corr ↑ | セル多様性 ↑ |
+| ---------------------------------------------------------------------------- | -------: | -----: | -------: | ----------: | -----------: |
+| [codebox/mosaic](https://github.com/codebox/mosaic)（単純 RGB 平均）         |  1.57 s  |  0.250 |    10.32 |       0.209 |        0.079 |
+| [photomosaic 0.3.1](https://pypi.org/project/photomosaic/)（CIELAB + kd-tree）|  2.09 s  |  0.068 |    37.18 |      −0.079 |        0.110 |
+| **mosaicraft — `fast`**（Oklab + 191 次元特徴 + FAISS）                      | 16.3  s  |  0.217 |    10.80 |       0.165 |    **0.339** |
+| **mosaicraft — `ultra`**（Oklab + MKL OT + ハンガリアン + NCC/SSIM + Laplacian）| 20.1  s |  0.166 |    13.84 |       0.106 |    **0.367** |
+
+**読み方**: ピクセル単位の忠実度（SSIM・ΔE2000）では codebox の単純平均が最良ですが、これは色の低域通過でマッチしているだけで、タイルの多様性は 7.9% しかありません（モザイク全体で似たような平均色のタイルが大量に重複使用されている状態）。mosaicraft は厳密な 1 対 1 のハンガリアン割当 + MKL 最適輸送 + 彩度ブーストを通すので、あえてターゲットのピクセル値から少し離れる代わりに、**セル多様性が約 4〜5 倍（37%）**になります。近距離で見たとき、モザイクを構成する各セルが別々の写真として認識できる──「フォトモザイクらしいフォトモザイク」になる、という設計思想です。純粋な色再現度を最優先するなら低域通過型、近くで見たときにタイルの意味を残したいなら mosaicraft、と目的で使い分けるのが実態に即しています。
+
+比較は `python benchmarks/compare_tools.py --target pearl_earring --grid 40` でローカル再現可能です。
+
 ### ベンチマーク（実測値）
 
 AMD Ryzen 7 7735HS / WSL2 Ubuntu 24.04 / Python 3.12。256 タイルプールからのコールドスタート実測（特徴キャッシュ未使用）。
@@ -385,6 +463,15 @@ AMD Ryzen 7 7735HS / WSL2 Ubuntu 24.04 / Python 3.12。256 タイルプールか
 | vivid   | 2.92 s   | 4.69 s   | 7.85 s     |
 
 `python benchmarks/benchmark_pipeline.py` でご自身の環境でも再実行可能です。`mosaicraft cache` で特徴キャッシュを事前構築すると、2 回目以降のタイル読み込みが数秒→1 秒未満に短縮されます。
+
+### 画像クレジット
+
+README で使用する全ての図版はパブリックドメイン / CC0 ソースから再現可能です。
+
+- **ターゲット絵画**: フェルメール「真珠の耳飾りの少女」（c. 1665）、ゴッホ「星月夜」（1889）、北斎「神奈川沖浪裏」「凱風快晴（赤富士）」（c. 1831）。いずれも Wikimedia Commons のパブリックドメイン版。
+- **タイルプール**: [picsum.photos](https://picsum.photos) の 1,024 枚（Unsplash-sourced、[Unsplash License](https://unsplash.com/license) = 事実上 CC0）。
+
+各ファイルの SHA256 とライセンスメタデータは [`docs/assets/MANIFEST.json`](docs/assets/MANIFEST.json) にコミット済み（画像本体は gitignore）。`python scripts/download_demo_assets.py` で取得、`--verify-only` で整合性チェック。
 
 ### ライセンス
 

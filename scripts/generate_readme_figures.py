@@ -1,21 +1,32 @@
 #!/usr/bin/env python3
 """Generate README figures for mosaicraft.
 
-Builds a CC0 procedural landscape target, a procedural tile pool, then
-renders mosaics with several presets and composites comparison figures
-into ``docs/images/``. Every asset is synthesized from scratch so the
-output is free to redistribute - no external photography involved.
+Loads public-domain paintings from Wikimedia Commons and a CC0 tile pool
+from picsum.photos (both bootstrapped by
+``scripts/download_demo_assets.py``), then renders mosaics with several
+presets and composites the README comparison figures into
+``docs/images/``.
+
+Every source image is freely redistributable:
+
+* Paintings — public domain (pre-1929, Wikimedia Commons)
+* Tiles    — CC0 / Unsplash License via picsum.photos
 
 Usage::
 
+    # one-time bootstrap (downloads ~8 MB into docs/assets/)
+    python scripts/download_demo_assets.py
+
+    # then render figures
     python scripts/generate_readme_figures.py
-    python scripts/generate_readme_figures.py --quick     # smaller, faster
-    python scripts/generate_readme_figures.py --seed 7
+    python scripts/generate_readme_figures.py --target pearl_earring
+    python scripts/generate_readme_figures.py --quick  # fewer cells, faster iteration
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sys
 import time
@@ -29,141 +40,63 @@ sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from mosaicraft import MosaicGenerator, configure_logging
-from scripts.generate_demo_tiles import generate_tile
+
+ASSETS_DIR = REPO_ROOT / "docs" / "assets"
+PAINTINGS_DIR = ASSETS_DIR / "paintings"
+TILES_DIR = ASSETS_DIR / "tiles"
+MANIFEST_PATH = ASSETS_DIR / "MANIFEST.json"
 
 
 # --------------------------------------------------------------------------- #
-# Procedural landscape target (CC0).
+# Asset loading.
 # --------------------------------------------------------------------------- #
 
-def _interp_channels(t: np.ndarray, stops_t: np.ndarray, stops_c: np.ndarray) -> np.ndarray:
-    out = np.empty((*t.shape, 3), dtype=np.float32)
-    for ch in range(3):
-        out[..., ch] = np.interp(t, stops_t, stops_c[:, ch])
-    return out
+# Hero caption text is pulled from MANIFEST.json so it stays in sync with the
+# licensing metadata. Keys here must match the ``name`` field in
+# ``scripts/download_demo_assets.py``'s ``PAINTINGS`` list.
+TARGET_CHOICES = {
+    "pearl_earring": "pearl_earring.jpg",
+    "starry_night": "starry_night.jpg",
+    "great_wave": "great_wave.jpg",
+    "red_fuji": "red_fuji.jpg",
+}
 
 
-def make_landscape_target(
-    width: int = 1600,
-    height: int = 1200,
-    seed: int = 42,
-) -> np.ndarray:
-    """Return a BGR uint8 image of a procedural mountain-sunset landscape."""
-    rng = np.random.default_rng(seed)
-    yy, xx = np.indices((height, width), dtype=np.float32)
-    y_norm = yy / height
-    x_norm = xx / width
-
-    horizon = 0.58
-    horizon_y = height * horizon
-
-    # ---- Sky gradient: deep violet → magenta → orange → gold → cream ----
-    stops_t = np.array([0.00, 0.30, 0.55, 0.78, 1.00], dtype=np.float32)
-    stops_c = np.array(
-        [
-            [130,  50, 105],  # deep violet (BGR)
-            [125,  85, 185],  # magenta
-            [ 85, 130, 235],  # warm orange
-            [110, 200, 250],  # gold
-            [180, 230, 250],  # pale cream
-        ],
-        dtype=np.float32,
-    )
-    sky_t = np.clip(yy / horizon_y, 0.0, 1.0)
-    sky_color = _interp_channels(sky_t, stops_t, stops_c)
-
-    # ---- Sun with glow ----
-    sun_cx = width * 0.68
-    sun_cy = horizon_y * 0.66
-    sun_r = min(width, height) * 0.045
-    d_sun = np.sqrt((xx - sun_cx) ** 2 + (yy - sun_cy) ** 2)
-    glow = np.exp(-((d_sun / (sun_r * 3.2)) ** 2))
-    sky_color += glow[..., None] * np.array(
-        [190, 235, 255], dtype=np.float32
-    )[None, None, :] * 0.45
-    core = np.clip(1.0 - d_sun / sun_r, 0.0, 1.0) ** 0.6
-    sky_color = sky_color * (1.0 - core[..., None]) + core[..., None] * np.array(
-        [235, 250, 255], dtype=np.float32
-    )[None, None, :]
-
-    # ---- Cloud bands (low-frequency multi-octave sine noise) ----
-    cloud = np.zeros_like(yy)
-    for octave in range(4):
-        f = 2 ** octave
-        phase_x = rng.uniform(0.0, 2.0 * np.pi)
-        phase_y = rng.uniform(0.0, 2.0 * np.pi)
-        cloud += (
-            np.sin(x_norm * np.pi * 3.0 * f + phase_x)
-            * np.sin(y_norm * np.pi * 2.0 * f + phase_y)
-            / f
+def load_manifest() -> dict:
+    if not MANIFEST_PATH.exists():
+        raise SystemExit(
+            "docs/assets/MANIFEST.json not found. "
+            "Run `python scripts/download_demo_assets.py` first."
         )
-    # Concentrate clouds in upper sky
-    cloud = np.clip(cloud * 0.5 + 0.5, 0.0, 1.0)
-    cloud *= np.exp(-(((y_norm - 0.22) * 4.0) ** 2))
-    sky_mask = (yy < horizon_y).astype(np.float32)
-    sky_color += (cloud * sky_mask)[..., None] * np.array(
-        [50, 70, 90], dtype=np.float32
-    )[None, None, :]
-
-    # ---- Mountain silhouette layers (far → near) ----
-    layers = [
-        (0.48, 30.0, np.array([100,  80,  95], dtype=np.float32)),
-        (0.53, 55.0, np.array([ 70,  55,  80], dtype=np.float32)),
-        (0.58, 85.0, np.array([ 35,  28,  50], dtype=np.float32)),
-    ]
-    for elev, rough, color in layers:
-        ridge = np.zeros(width, dtype=np.float32)
-        for k in range(6):
-            freq = rng.integers(2, 9)
-            phase = rng.uniform(0.0, 2.0 * np.pi)
-            amp = rough / (k + 1.0)
-            ridge += np.sin(np.arange(width) / width * freq * 2.0 * np.pi + phase) * amp
-        ridge_y = elev * height + ridge
-        ridge_map = np.broadcast_to(ridge_y[None, :], (height, width))
-        mask = (yy >= ridge_map) & (yy < horizon_y)
-        sky_color[mask] = color
-
-    # ---- Water: reflect the sky, darken, add ripples ----
-    water_y = yy - horizon_y
-    reflect_y = np.clip(horizon_y - water_y * 0.55, 0.0, horizon_y - 1.0).astype(np.int32)
-    x_i = xx.astype(np.int32)
-    reflected = sky_color[reflect_y, x_i]
-    depth_t = np.clip(water_y / max(1.0, height - horizon_y), 0.0, 1.0)
-    water = reflected * (0.45 + 0.25 * (1.0 - depth_t))[..., None]
-
-    # Ripples (visible in reflection)
-    ripple = (
-        np.sin(yy * 0.35 + xx * 0.015) * 6.0
-        + np.sin(yy * 0.18 - xx * 0.010) * 4.0
-        + np.sin(yy * 0.08 + xx * 0.004) * 2.5
-    )
-    water = water + ripple[..., None]
-
-    water_mask = (yy >= horizon_y).astype(np.float32)[..., None]
-    out = sky_color * (1.0 - water_mask) + water * water_mask
-
-    # Subtle grain
-    grain = rng.integers(-4, 5, size=out.shape, dtype=np.int16)
-    out = np.clip(out + grain, 0, 255).astype(np.uint8)
-    return out
+    return json.loads(MANIFEST_PATH.read_text())
 
 
-# --------------------------------------------------------------------------- #
-# Tiles.
-# --------------------------------------------------------------------------- #
+def painting_caption(manifest: dict, filename: str) -> str:
+    """Return a short attribution string like 'Vermeer - Girl with a Pearl Earring (PD)'."""
+    for entry in manifest.get("paintings", []):
+        if entry["path"].endswith(filename):
+            artist_last = entry["artist"].split()[-1]
+            return f"{artist_last} - {entry['title']} (PD)"
+    return filename
 
-def build_tile_pool(tiles_dir: Path, count: int, tile_size: int, seed: int) -> None:
-    tiles_dir.mkdir(parents=True, exist_ok=True)
-    # Clear stale pool so stray images don't influence matching.
-    for p in tiles_dir.glob("*.jpg"):
-        p.unlink()
-    for i in range(count):
-        tile = generate_tile(seed + i, tile_size)
-        cv2.imwrite(
-            str(tiles_dir / f"tile_{i:05d}.jpg"),
-            tile,
-            [cv2.IMWRITE_JPEG_QUALITY, 92],
+
+def load_target(filename: str, max_side: int = 1600) -> np.ndarray:
+    """Load a painting and resize so its longest side equals *max_side*."""
+    src = PAINTINGS_DIR / filename
+    if not src.exists():
+        raise SystemExit(
+            f"{src} not found. Run `python scripts/download_demo_assets.py` first."
         )
+    img = cv2.imread(str(src))
+    if img is None:
+        raise SystemExit(f"failed to decode {src}")
+    h, w = img.shape[:2]
+    scale = max_side / max(h, w)
+    if scale < 1.0:
+        new_w = max(1, round(w * scale))
+        new_h = max(1, round(h * scale))
+        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    return img
 
 
 # --------------------------------------------------------------------------- #
@@ -246,21 +179,25 @@ def _center_crop(img: np.ndarray, box: int) -> np.ndarray:
 _JPEG_Q = 86  # balance file size vs visible blockiness on GitHub
 
 
-def make_hero(target: np.ndarray, mosaic: np.ndarray, out_path: Path) -> None:
+def make_hero(
+    target: np.ndarray, mosaic: np.ndarray, out_path: Path, *, target_caption: str
+) -> None:
     """Side-by-side target vs mosaic for the top of the README."""
     fig = _hstack_with_labels(
         [target, mosaic],
-        ["Target (CC0 procedural)", "mosaicraft output - preset: ultra"],
+        [f"Target: {target_caption}", "mosaicraft output - preset: ultra"],
         target_h=720,
         gap=14,
     )
     cv2.imwrite(str(out_path), fig, [cv2.IMWRITE_JPEG_QUALITY, _JPEG_Q])
 
 
-def make_before_after(target: np.ndarray, mosaic: np.ndarray, out_path: Path) -> None:
+def make_before_after(
+    target: np.ndarray, mosaic: np.ndarray, out_path: Path
+) -> None:
     fig = _hstack_with_labels(
         [target, mosaic],
-        ["Before", "After - preset: ultra"],
+        ["Before (original painting)", "After - preset: ultra"],
         target_h=640,
         gap=12,
     )
@@ -303,24 +240,60 @@ def make_zoom_detail(mosaic: np.ndarray, out_path: Path) -> None:
     cv2.imwrite(str(out_path), fig, [cv2.IMWRITE_JPEG_QUALITY, _JPEG_Q])
 
 
-def make_tiles_sample(tiles_dir: Path, out_path: Path, *, rows: int = 4, cols: int = 12) -> None:
-    files = sorted(tiles_dir.glob("*.jpg"))[: rows * cols * 3 : 3]  # stride to vary
+def make_tiles_sample(
+    tiles_dir: Path, out_path: Path, *, rows: int = 4, cols: int = 12
+) -> None:
+    files = sorted(tiles_dir.glob("*.jpg"))
     if not files:
         return
-    sample = [cv2.imread(str(p)) for p in files[: rows * cols]]
+    # Stride through the pool so the sample shows visual variety.
+    stride = max(1, len(files) // (rows * cols))
+    picked = files[::stride][: rows * cols]
+    sample = [cv2.imread(str(p)) for p in picked]
     if not sample or any(im is None for im in sample):
         return
     tile_h, tile_w = sample[0].shape[:2]
-    canvas = np.full((rows * tile_h + (rows + 1) * 4, cols * tile_w + (cols + 1) * 4, 3), 22, dtype=np.uint8)
+    canvas = np.full(
+        (rows * tile_h + (rows + 1) * 4, cols * tile_w + (cols + 1) * 4, 3),
+        22,
+        dtype=np.uint8,
+    )
     for i, im in enumerate(sample):
         r, c = divmod(i, cols)
         y = 4 + r * (tile_h + 4)
         x = 4 + c * (tile_w + 4)
         canvas[y : y + tile_h, x : x + tile_w] = im
-    # Top label
-    label = _label_bar(canvas.shape[1], "Procedural tile pool (CC0) - gradients, shapes, stripes, checkers", height=44, font_scale=0.7)
+    label = _label_bar(
+        canvas.shape[1],
+        "CC0 tile pool (Unsplash License via picsum.photos) - 1024 photographs",
+        height=44,
+        font_scale=0.7,
+    )
     fig = np.vstack([label, canvas])
     cv2.imwrite(str(out_path), fig, [cv2.IMWRITE_JPEG_QUALITY, 88])
+
+
+def make_paintings_gallery(
+    manifest: dict, out_path: Path, *, target_h: int = 520
+) -> None:
+    """4-up gallery of all public-domain paintings with artist labels."""
+    entries = manifest.get("paintings", [])
+    if not entries:
+        return
+    imgs = []
+    labels = []
+    for entry in entries:
+        src = ASSETS_DIR / entry["path"]
+        im = cv2.imread(str(src))
+        if im is None:
+            continue
+        imgs.append(im)
+        artist_last = entry["artist"].split()[-1]
+        labels.append(f"{artist_last} - {entry['title']}")
+    if not imgs:
+        return
+    fig = _hstack_with_labels(imgs, labels, target_h=target_h, gap=10)
+    cv2.imwrite(str(out_path), fig, [cv2.IMWRITE_JPEG_QUALITY, _JPEG_Q])
 
 
 # --------------------------------------------------------------------------- #
@@ -329,15 +302,24 @@ def make_tiles_sample(tiles_dir: Path, out_path: Path, *, rows: int = 4, cols: i
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--target",
+        choices=sorted(TARGET_CHOICES.keys()),
+        default="pearl_earring",
+        help="Which public-domain painting to feature as the hero target",
+    )
     parser.add_argument("--output-dir", type=Path, default=REPO_ROOT / "docs" / "images")
     parser.add_argument(
         "--work-dir",
         type=Path,
         default=REPO_ROOT / ".readme_figures_cache",
-        help="Scratch directory for target/tiles/mosaics",
+        help="Scratch directory for the resized target / intermediate mosaics",
     )
-    parser.add_argument("--quick", action="store_true", help="Smaller assets, faster to iterate")
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Fewer cells, faster to iterate (for layout tweaks)",
+    )
     parser.add_argument(
         "--keep-work",
         action="store_true",
@@ -349,45 +331,47 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     configure_logging(verbose=False)
+    manifest = load_manifest()
 
     if args.quick:
-        tgt_w, tgt_h = 1000, 750
-        n_tiles = 768
-        tile_px = 80
+        max_side = 1000
         n_cells = 1200
         cell_px = 56
     else:
-        tgt_w, tgt_h = 1600, 1200
-        n_tiles = 2048
-        tile_px = 96
+        max_side = 1600
         n_cells = 3200
         cell_px = 72
 
     args.work_dir.mkdir(parents=True, exist_ok=True)
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    tiles_dir = args.work_dir / "tiles"
-    target_path = args.work_dir / "target.jpg"
+    target_file = TARGET_CHOICES[args.target]
+    target_path = args.work_dir / f"target_{args.target}.jpg"
 
     # 1. Target
     t0 = time.perf_counter()
-    print(f"[1/4] Building landscape target {tgt_w}x{tgt_h} (seed={args.seed}) ...")
-    target = make_landscape_target(tgt_w, tgt_h, seed=args.seed)
+    print(f"[1/4] Loading target painting: {target_file} ...")
+    target = load_target(target_file, max_side=max_side)
     cv2.imwrite(str(target_path), target, [cv2.IMWRITE_JPEG_QUALITY, 94])
-    print(f"     target ready in {time.perf_counter() - t0:.1f}s")
+    caption = painting_caption(manifest, target_file)
+    print(f"     target {target.shape[1]}x{target.shape[0]} ready in {time.perf_counter() - t0:.1f}s")
+    print(f"     caption: {caption}")
 
-    # 2. Tiles
-    t0 = time.perf_counter()
-    print(f"[2/4] Generating {n_tiles} procedural tiles ({tile_px}px) ...")
-    build_tile_pool(tiles_dir, count=n_tiles, tile_size=tile_px, seed=args.seed)
-    print(f"     tile pool ready in {time.perf_counter() - t0:.1f}s")
+    # 2. Tiles — pulled straight from the committed CC0 pool.
+    n_tiles = sum(1 for _ in TILES_DIR.glob("*.jpg"))
+    if n_tiles == 0:
+        raise SystemExit(
+            f"no tiles in {TILES_DIR}. "
+            "Run `python scripts/download_demo_assets.py` first."
+        )
+    print(f"[2/4] Using {n_tiles} CC0 tiles from {TILES_DIR.relative_to(REPO_ROOT)}")
 
     # 3. Mosaics
     mosaics: dict[str, np.ndarray] = {}
     for preset in ["natural", "ultra", "vivid_max"]:
         t0 = time.perf_counter()
         print(f"[3/4] Rendering mosaic (preset={preset}, cells={n_cells}) ...")
-        gen = MosaicGenerator(tile_dir=tiles_dir, preset=preset)
-        out_path = args.work_dir / f"mosaic_{preset}.jpg"
+        gen = MosaicGenerator(tile_dir=TILES_DIR, preset=preset)
+        out_path = args.work_dir / f"mosaic_{args.target}_{preset}.jpg"
         result = gen.generate(
             target_path,
             out_path,
@@ -403,12 +387,18 @@ def main() -> int:
 
     # 4. Composites
     t0 = time.perf_counter()
-    print("[4/4] Composing comparison figures ...")
-    make_hero(target, mosaics["ultra"], args.output_dir / "hero.jpg")
+    print("[4/4] Composing figures ...")
+    make_hero(
+        target,
+        mosaics["ultra"],
+        args.output_dir / "hero.jpg",
+        target_caption=caption,
+    )
     make_before_after(target, mosaics["ultra"], args.output_dir / "before_after.jpg")
     make_presets_comparison(mosaics, args.output_dir / "presets_comparison.jpg")
     make_zoom_detail(mosaics["ultra"], args.output_dir / "zoom_detail.jpg")
-    make_tiles_sample(tiles_dir, args.output_dir / "tiles_sample.jpg")
+    make_tiles_sample(TILES_DIR, args.output_dir / "tiles_sample.jpg")
+    make_paintings_gallery(manifest, args.output_dir / "paintings_gallery.jpg")
     print(f"     figures ready in {time.perf_counter() - t0:.1f}s")
 
     if not args.keep_work:

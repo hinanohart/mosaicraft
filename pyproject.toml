@@ -109,7 +109,7 @@ ignore = [
 "tests/*" = ["B011"]
 "examples/*" = ["E402"]
 "scripts/generate_readme_figures.py" = ["E402", "I001"]
-"benchmarks/*" = ["E402"]
+"benchmarks/*" = ["E402", "RUF001", "RUF002"]  # allow the `×` multiplication sign
 
 [tool.ruff.format]
 quote-style = "double"

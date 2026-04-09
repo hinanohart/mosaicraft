@@ -79,6 +79,12 @@ hq_cache/
 *.npz
 *_cache/
 
+# Downloadable demo assets — reproducible via docs/assets/MANIFEST.json
+# (MANIFEST.json itself is committed; the raw image files are not)
+docs/assets/paintings/
+docs/assets/tiles/
+docs/assets/bench_outputs/
+
 # Output directories
 output/
 out/
