@@ -46,7 +46,6 @@ def _gradient_tile(rng: np.random.Generator, size: int) -> NDArray:
     color_a = _hsv_to_bgr(_hsv_color(rng))
     color_b = _hsv_to_bgr(_hsv_color(rng))
     direction = rng.integers(0, 4)
-    out = np.zeros((size, size, 3), dtype=np.float32)
     if direction == 0:  # horizontal
         t = np.linspace(0, 1, size)[None, :, None]
     elif direction == 1:  # vertical

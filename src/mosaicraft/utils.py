@@ -9,8 +9,6 @@ from time import perf_counter
 
 import numpy as np
 
-NDArray = np.ndarray
-
 logger = logging.getLogger("mosaicraft")
 
 __all__ = ["calc_grid", "configure_logging", "logger", "stage"]
