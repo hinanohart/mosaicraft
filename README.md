@@ -217,9 +217,9 @@ Output: ~14,000 × 14,000 px ≈ 200 megapixels. The dominant memory cost is the
 
 ![Comparison with zoom detail](docs/images/comparison_zoom.jpg)
 
-*Top row: full mosaic. Bottom row: detail crop (red box). Left: target painting. Center: [codebox/mosaic](https://github.com/codebox/mosaic) (RGB mean matching). Right: mosaicraft `vivid --color-variants 4` (MKL optimal transport + Oklch pool expansion). Same 1,024-tile CC0 pool, same 40×40 grid.*
+*Left: original painting. Right: [codebox/mosaic](https://github.com/codebox/mosaic) (RGB mean matching). Bottom row: detail crop (red box). Same 1,024-tile CC0 pool, 40×40 grid.*
 
-The zoom tells the story. codebox picks whichever ~100 tiles are closest in RGB mean and reuses them freely — from a distance it looks close to the target, but zoom in and every cell is the same handful of photos (**cell diversity 6–8%**). mosaicraft enforces strict 1:1 Hungarian assignment with MKL optimal-transport color transfer, so every cell is a distinct photograph (**diversity 38–57%**). That is the difference between a colored grid and a photomosaic.
+The zoom tells the story. codebox picks whichever ~100 tiles are closest in RGB mean and reuses them freely — cell diversity is **6–8%**, meaning 92% of the grid is the same handful of photos. Compare to the hero image above: mosaicraft's `vivid` preset enforces strict 1:1 Hungarian assignment with MKL optimal-transport color transfer, achieving **38–57% diversity** — every cell is a distinct photograph.
 
 <details>
 <summary>Pixel metrics (click to expand)</summary>
