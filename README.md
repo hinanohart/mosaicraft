@@ -65,7 +65,7 @@ mosaicraft recolor-presets
 
 ![Before and after](docs/images/before_after.jpg)
 
-*Target: Vermeer, Girl with a Pearl Earring (1,366 × 1,600 px). 1,024-image CC0 tile pool × 4 augmentations = 4,096 candidates. 52 × 61 = 3,172 cells. Preset `ultra`.*
+*Target: Vermeer, Girl with a Pearl Earring (1,366 × 1,600 px). 1,024-image CC0 tile pool × 4 augmentations = 4,096 candidates. 52 × 61 = 3,172 cells. Preset `vivid`.*
 
 ### Python API
 
@@ -74,7 +74,7 @@ from mosaicraft import MosaicGenerator, recolor
 
 gen = MosaicGenerator(
     tile_dir="./tiles",
-    preset="ultra",
+    preset="vivid",
     color_variants=4,              # 1,024 tiles -> 5,120 candidates
 )
 result = gen.generate("photo.jpg", "mosaic.jpg", target_tiles=5000)
@@ -142,7 +142,7 @@ recolor("mosaic.jpg", "mosaic_sepia.jpg", preset="sepia")
 One of the hardest problems in photomosaic generation is having enough tiles. A 1,000-image pool gives ~1,000 mean colors, so a 5,000-cell mosaic is forced to repeat. `color_variants=N` rotates every tile through N evenly-spaced hue shifts in Oklch (the default schedule is 72° / 144° / 216° / 288°), reusing the same photograph at four new positions on the a/b plane:
 
 ```python
-gen = MosaicGenerator(tile_dir="./tiles", preset="ultra", color_variants=4)
+gen = MosaicGenerator(tile_dir="./tiles", preset="vivid", color_variants=4)
 ```
 
 Lightness is preserved exactly, so texture and shading are untouched — only hue and chroma move. For a 1,024-tile pool this turns into **5,120 candidates after Oklch expansion**, or **20,480 after the default 4× geometric augmentation on top**. The Hungarian assignment then has an order of magnitude more material to work with, which is the difference between a mosaic that repeats and a mosaic that doesn't.
@@ -205,7 +205,15 @@ Run `python benchmarks/benchmark_pipeline.py --scale large` to reproduce. Every 
 
 The 30,000-cell output is **8,904 × 10,472 px ≈ 93 megapixels** and the finished JPEG is ~47 MB. (`ultra` runs faster than `fast` at the 20k / 30k end because the Hungarian assignment saturates before the FAISS + error-diffusion code path stops benefiting from more cells; your mileage will vary with the tile pool / cell size ratio.)
 
-**50,000-cell estimate** (CPU only, no GPU): `fast` ≈ 8–12 GB RAM, `vivid` ≈ 12–16 GB, `vivid --color-variants 4` ≈ 20–25 GB. Output would be ~14,000 × 14,000 px ≈ 200 megapixels. The dominant cost is the dense Hungarian cost matrix (`n_cells × n_candidates × 8 bytes`); `fast` avoids it via FAISS.
+**50,000-cell estimate** (CPU only, no GPU):
+
+| preset | est. time | est. peak RAM |
+| ------ | --------: | ------------: |
+| `fast` | ~5–7 min  |     8–12 GB   |
+| `vivid`| ~4–6 min  |    12–16 GB   |
+| `vivid --color-variants 4` | ~10–15 min | 20–25 GB |
+
+Output: ~14,000 × 14,000 px ≈ 200 megapixels. The dominant memory cost is the dense Hungarian cost matrix (`n_cells × n_candidates × 8 bytes`); `fast` avoids it via FAISS.
 
 ## Compared against other photomosaic OSS
 
@@ -244,7 +252,7 @@ from mosaicraft import MosaicGenerator, recolor, rotate_hue_oklch
 # Generator
 gen = MosaicGenerator(
     tile_dir="./tiles",          # or cache_dir="./cache"
-    preset="ultra",              # preset name or dict
+    preset="vivid",              # preset name or dict
     augment=True,                # 4x geometric + brightness aug
     color_variants=0,            # set to >0 to expand pool via Oklch rotation
 )
