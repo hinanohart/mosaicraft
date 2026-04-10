@@ -185,7 +185,7 @@ def make_hero(
     """Side-by-side target vs mosaic for the top of the README."""
     fig = _hstack_with_labels(
         [target, mosaic],
-        [f"Target: {target_caption}", "mosaicraft output - preset: ultra"],
+        [f"Target: {target_caption}", "mosaicraft output - preset: vivid"],
         target_h=720,
         gap=14,
     )
@@ -197,7 +197,7 @@ def make_before_after(
 ) -> None:
     fig = _hstack_with_labels(
         [target, mosaic],
-        ["Before (original painting)", "After - preset: ultra"],
+        ["Before (original painting)", "After - preset: vivid"],
         target_h=640,
         gap=12,
     )
@@ -207,12 +207,12 @@ def make_before_after(
 def make_presets_comparison(
     mosaics: dict[str, np.ndarray], out_path: Path
 ) -> None:
-    order = ["natural", "ultra", "vivid"]
+    order = ["vivid", "ultra", "natural"]
     imgs = [mosaics[p] for p in order]
     labels = [
-        "natural (restrained saturation)",
-        "ultra (Hungarian + Laplacian)",
         "vivid (MKL optimal transport)",
+        "ultra (Hungarian + Laplacian)",
+        "natural (restrained saturation)",
     ]
     fig = _hstack_with_labels(imgs, labels, target_h=620, gap=12)
     cv2.imwrite(str(out_path), fig, [cv2.IMWRITE_JPEG_QUALITY, _JPEG_Q])
@@ -445,16 +445,16 @@ def main() -> int:
     print("[4/4] Composing figures ...")
     make_hero(
         target,
-        mosaics["ultra"],
+        mosaics["vivid"],
         args.output_dir / "hero.jpg",
         target_caption=caption,
     )
-    make_before_after(target, mosaics["ultra"], args.output_dir / "before_after.jpg")
+    make_before_after(target, mosaics["vivid"], args.output_dir / "before_after.jpg")
     make_presets_comparison(mosaics, args.output_dir / "presets_comparison.jpg")
-    make_zoom_detail(mosaics["ultra"], args.output_dir / "zoom_detail.jpg")
+    make_zoom_detail(mosaics["vivid"], args.output_dir / "zoom_detail.jpg")
     make_tiles_sample(TILES_DIR, args.output_dir / "tiles_sample.jpg")
     make_paintings_gallery(manifest, args.output_dir / "paintings_gallery.jpg")
-    make_recolor_gallery(mosaics["ultra"], args.output_dir / "recolor_gallery.jpg")
+    make_recolor_gallery(mosaics["vivid"], args.output_dir / "recolor_gallery.jpg")
     print(f"     figures ready in {time.perf_counter() - t0:.1f}s")
 
     if not args.keep_work:

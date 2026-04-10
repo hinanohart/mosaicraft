@@ -8,8 +8,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-[日本語 README](README.ja.md)
-
 ![Target vs mosaicraft output](docs/images/hero.jpg)
 
 ---
@@ -168,9 +166,9 @@ Under the hood: convert to Oklab, split into L and C·exp(iH), rotate H and scal
 
 | Preset    | Best for                                                   |
 | --------- | ---------------------------------------------------------- |
-| `ultra`   | Highest quality. Hungarian + Laplacian blend.              |
+| `vivid`   | **Recommended.** MKL optimal transport with skin protection. |
+| `ultra`   | Hungarian + Laplacian blend. Highest pixel fidelity.       |
 | `natural` | Photo-realistic look, restrained saturation.               |
-| `vivid`   | MKL optimal transport with skin protection.                |
 | `tile`    | Emphasizes individual tiles. Strongest mosaic look.        |
 | `fast`    | FAISS + error diffusion only. No rerank, no Hungarian.     |
 
