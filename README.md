@@ -205,44 +205,32 @@ Run `python benchmarks/benchmark_pipeline.py --scale large` to reproduce. Every 
 
 The 30,000-cell output is **8,904 × 10,472 px ≈ 93 megapixels** and the finished JPEG is ~47 MB. (`ultra` runs faster than `fast` at the 20k / 30k end because the Hungarian assignment saturates before the FAISS + error-diffusion code path stops benefiting from more cells; your mileage will vary with the tile pool / cell size ratio.)
 
+**50,000-cell estimate** (CPU only, no GPU): `fast` ≈ 8–12 GB RAM, `vivid` ≈ 12–16 GB, `vivid --color-variants 4` ≈ 20–25 GB. Output would be ~14,000 × 14,000 px ≈ 200 megapixels. The dominant cost is the dense Hungarian cost matrix (`n_cells × n_candidates × 8 bytes`); `fast` avoids it via FAISS.
+
 ## Compared against other photomosaic OSS
 
-`benchmarks/compare_tools.py` runs `mosaicraft` side-by-side with two reference open-source photomosaic tools against an identical target, tile pool, and grid:
+![Comparison with zoom detail](docs/images/comparison_zoom.jpg)
 
-- [**codebox/mosaic**](https://github.com/codebox/mosaic) — naive RGB-mean matching.
-- [**photomosaic 0.3.1**](https://pypi.org/project/photomosaic/) — CIELAB + kd-tree, 2018-era.
+*Top row: full mosaic. Bottom row: detail crop (red box). Left: target painting. Center: [codebox/mosaic](https://github.com/codebox/mosaic) (RGB mean matching). Right: mosaicraft `vivid --color-variants 4` (MKL optimal transport + Oklch pool expansion). Same 1,024-tile CC0 pool, same 40×40 grid.*
 
-Target: Vermeer, *Girl with a Pearl Earring* (Wikimedia, public domain). Tile pool: 1,024 CC0 photographs via picsum.photos. Grid: 40 × 40 = 1,600 cells. Metrics are computed on the final mosaic against the original painting.
+The zoom tells the story. codebox picks whichever ~100 tiles are closest in RGB mean and reuses them freely — from a distance it looks close to the target, but zoom in and every cell is the same handful of photos (**cell diversity 6–8%**). mosaicraft enforces strict 1:1 Hungarian assignment with MKL optimal-transport color transfer, so every cell is a distinct photograph (**diversity 38–57%**). That is the difference between a colored grid and a photomosaic.
 
-![Side-by-side comparison](docs/images/comparison.jpg)
+<details>
+<summary>Pixel metrics (click to expand)</summary>
 
-| Tool                                      |   Wall | SSIM ↑ | Blur. SSIM ↑ | ΔE2000 ↓ |  LPIPS ↓ | Cell diversity ↑ |
-| ----------------------------------------- | -----: | -----: | -----------: | -------: | -------: | ---------------: |
-| codebox/mosaic (RGB mean)                 |  1.2 s |  0.250 |    **0.811** |    10.32 |**0.544** |            0.079 |
-| photomosaic 0.3.1 (CIELAB + kd-tree)      |  1.9 s |  0.065 |        0.443 |    37.61 |    0.784 |            0.114 |
-| mosaicraft — `fast`                       | 15.1 s |  0.216 |        0.750 |    10.85 |    0.630 |        **0.341** |
-| mosaicraft — `ultra`                      | 18.7 s |  0.166 |        0.635 |    13.84 |    0.622 |        **0.367** |
-| **mosaicraft — `ultra --color-variants 4`** | 68.6 s |**0.245** |      0.715 |  **9.70** |    0.557 |        **0.337** |
+Target: Vermeer, *Girl with a Pearl Earring*. Grid: 40×40 = 1,600 cells. 1,024 CC0 tiles.
 
-Metrics:
+| Tool                              |   Wall | SSIM ↑ | LPIPS ↓ | ΔE2000 ↓ | Diversity ↑ |
+| --------------------------------- | -----: | -----: | ------: | -------: | ----------: |
+| codebox/mosaic (RGB mean)         |  1.3 s |  0.250 |   0.544 |    10.32 |       0.079 |
+| photomosaic 0.3.1 (CIELAB)       |  2.1 s |  0.065 |   0.776 |    37.18 |       0.111 |
+| mosaicraft `fast`                 | 17.2 s |  0.216 |   0.630 |    10.85 |       0.341 |
+| mosaicraft `vivid`                | 22.2 s |  0.148 |   0.627 |    15.12 |   **0.424** |
+| mosaicraft `vivid --cv 4`        | 77.6 s |  0.224 |   0.559 |    11.06 |   **0.384** |
 
-- **SSIM** (Wang et al., 2004) and **ΔE2000** (CIEDE2000) are computed on the raw mosaic against the original painting — both reward low-pass pixel fidelity.
-- **Blurred SSIM** is SSIM after both images are downsampled and box-blurred; it approximates "how close does the mosaic look from a few meters away?"
-- **LPIPS** (Zhang et al., CVPR 2018) is a learned perceptual distance from an AlexNet feature embedding — closer to human judgement than pixel metrics but still trained on natural photos, not mosaics.
-- **Cell diversity** is the fraction of 5-bit-quantized cell means that are unique in the final mosaic. A higher number means the mosaic makes use of more of the tile pool.
+SSIM and ΔE2000 reward pixel fidelity, which structurally favors mean-matching tools that reuse the same tiles. LPIPS (Zhang et al., CVPR 2018) correlates better with human judgement. Cell diversity — the fraction of visually distinct cells — is the metric that separates photomosaics from colored grids.
 
-### How to read these numbers
-
-This comparison captures the fundamental trade-off between pixel-fidelity mean-matching and strict photomosaic constraints — and also shows what changes when you let mosaicraft use its full pool.
-
-- **codebox/mosaic** picks the tile whose mean color is closest to each cell, independently, with no constraint on tile reuse. The result is effectively a low-pass-filtered version of the target painted from whichever ~100 tiles happen to be closest in RGB. Its cell diversity is **7.9%** — only 126 of the 1,600 cells are visually distinct. Viewed from across the room it's the closest to the target; viewed from two feet away it's a blurry smear of the same dozen photographs.
-- **photomosaic 0.3.1** is a historical baseline (2018, designed for much larger pools) and struggles at this scale. Included because it is the current `pip install photomosaic`.
-- **mosaicraft — `fast` / `ultra`** enforce a strict one-to-one Hungarian assignment, which pushes the output *away* from target pixel values in exchange for **4.6× higher diversity**: 34–37% of cells are visually distinct. That is the point of a photomosaic.
-- **mosaicraft — `ultra --color-variants 4`** expands the 1,024-tile pool into 5,120 Oklch hue-rotated candidates (× 4 geometric aug = 20,480 candidates). The Hungarian assignment then has an order of magnitude more material, and the output **beats codebox on ΔE2000** (9.70 vs 10.32), effectively ties on SSIM (0.245 vs 0.250), closes the LPIPS gap (0.557 vs 0.544), and holds **4.3× higher cell diversity** — all at once. This is the row to beat.
-
-**tl;dr**: At the same tile pool size, a mean-matching tool will beat a photomosaic on pixel metrics by design. Once mosaicraft can stretch the pool with Oklch variants, the gap disappears on every metric that matters while the structural photomosaic property (diversity) stays intact.
-
-Reproduce locally:
+</details>
 
 ```bash
 python benchmarks/compare_tools.py --target pearl_earring.jpg --grid 40

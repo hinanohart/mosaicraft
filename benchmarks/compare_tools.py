@@ -467,14 +467,14 @@ TOOLS: list[dict[str, Any]] = [
         "runner": "mosaicraft_fast",
     },
     {
-        "id": "mosaicraft_ultra",
-        "label": "mosaicraft ultra\n(Oklab + Hungarian)",
-        "runner": "mosaicraft_ultra",
+        "id": "mosaicraft_vivid",
+        "label": "mosaicraft vivid\n(MKL optimal transport)",
+        "runner": "mosaicraft_vivid",
     },
     {
-        "id": "mosaicraft_ultra_cv4",
-        "label": "mosaicraft ultra + cv4\n(Oklch pool x5)",
-        "runner": "mosaicraft_ultra_cv4",
+        "id": "mosaicraft_vivid_cv4",
+        "label": "mosaicraft vivid + cv4\n(MKL + Oklch pool x5)",
+        "runner": "mosaicraft_vivid_cv4",
     },
 ]
 
@@ -496,13 +496,13 @@ def make_runner(
         return "mosaicraft_fast", lambda: run_mosaicraft(
             "fast", target_path, TILES_DIR, grid * grid, out_path
         )
-    if runner_id == "mosaicraft_ultra":
-        return "mosaicraft_ultra", lambda: run_mosaicraft(
-            "ultra", target_path, TILES_DIR, grid * grid, out_path
+    if runner_id == "mosaicraft_vivid":
+        return "mosaicraft_vivid", lambda: run_mosaicraft(
+            "vivid", target_path, TILES_DIR, grid * grid, out_path
         )
-    if runner_id == "mosaicraft_ultra_cv4":
-        return "mosaicraft_ultra_cv4", lambda: run_mosaicraft(
-            "ultra", target_path, TILES_DIR, grid * grid, out_path, color_variants=4
+    if runner_id == "mosaicraft_vivid_cv4":
+        return "mosaicraft_vivid_cv4", lambda: run_mosaicraft(
+            "vivid", target_path, TILES_DIR, grid * grid, out_path, color_variants=4
         )
     raise ValueError(f"unknown runner {runner_id}")
 
