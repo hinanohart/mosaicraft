@@ -24,12 +24,7 @@ from pathlib import Path
 from . import __version__
 from .core import MosaicGenerator
 from .presets import get_preset, list_presets
-from .recolor import (
-    get_recolor_preset,
-    list_recolor_presets,
-    recolor,
-    recolor_region,
-)
+from .recolor import get_recolor_preset, list_recolor_presets, recolor
 from .tiles import build_cache
 from .utils import configure_logging, logger
 
@@ -41,7 +36,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="mosaicraft",
         description=(
             "Perceptual photomosaic generator with Oklab color space, "
-            "MKL optimal transport, and Laplacian blending."
+            "Hungarian 1:1 placement, MKL optimal-transport color matching, "
+            "Laplacian blending, and Oklch tile-pool expansion + recoloring."
         ),
     )
     parser.add_argument(
@@ -78,9 +74,9 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument(
         "-p",
         "--preset",
-        default="ultra",
+        default="vivid",
         choices=list_presets(),
-        help="Profile preset (default: ultra)",
+        help="Profile preset (default: vivid)",
     )
     g.add_argument(
         "-n",
@@ -220,127 +216,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="JPEG quality 1-100 (default: 95)",
     )
 
-    # recolor-region
-    rr = sub.add_parser(
-        "recolor-region",
-        help=(
-            "Recolor only a selected region of an image "
-            "(perceptual Oklch color-range mask, bbox, or PNG mask)."
-        ),
-    )
-    rr.add_argument("input", type=Path, help="Input image path")
-    rr.add_argument("-o", "--output", type=Path, required=True, help="Output image path")
-
-    # Region specification (mutually exclusive)
-    region = rr.add_mutually_exclusive_group(required=True)
-    region.add_argument(
-        "--source-hex",
-        help="Detect this color in the image (#RRGGBB) — default region selector",
-    )
-    region.add_argument(
-        "--source-hue",
-        type=float,
-        dest="source_hue_deg",
-        help="Detect a region centered at this Oklch hue (degrees)",
-    )
-    region.add_argument(
-        "--mask",
-        type=Path,
-        help="Path to an explicit binary mask PNG (white = region)",
-    )
-    region.add_argument(
-        "--bbox",
-        type=str,
-        help="Rectangular region as 'y1,x1,y2,x2' pixel coordinates",
-    )
-
-    rr.add_argument(
-        "--hue-tolerance",
-        type=float,
-        default=20.0,
-        dest="hue_tolerance_deg",
-        help="Hue acceptance window in degrees on each side (default: 20)",
-    )
-    rr.add_argument(
-        "--chroma-min", type=float, default=0.05,
-        help="Minimum Oklch chroma to include (default: 0.05)",
-    )
-    rr.add_argument(
-        "--chroma-max", type=float, default=0.40,
-        help="Maximum Oklch chroma to include (default: 0.40)",
-    )
-    rr.add_argument(
-        "--lightness-min", type=float, default=0.0,
-        help="Minimum Oklab L to include (default: 0.0)",
-    )
-    rr.add_argument(
-        "--lightness-max", type=float, default=1.0,
-        help="Maximum Oklab L to include (default: 1.0)",
-    )
-    rr.add_argument(
-        "--morph-open", type=int, default=3,
-        help="Morphology open kernel (default: 3, 0=off)",
-    )
-    rr.add_argument(
-        "--morph-close", type=int, default=5,
-        help="Morphology close kernel (default: 5, 0=off)",
-    )
-    rr.add_argument(
-        "--min-area", type=int, default=100,
-        help="Drop connected components smaller than this many pixels (default: 100)",
-    )
-    rr.add_argument(
-        "--feather", type=int, default=3, dest="feather_px",
-        help="Gaussian feathering radius (default: 3)",
-    )
-    rr.add_argument(
-        "--save-mask", type=Path, default=None,
-        help="Optional path to save the generated binary mask as PNG",
-    )
-
-    # Target color (one of)
-    target = rr.add_mutually_exclusive_group(required=True)
-    target.add_argument(
-        "-p", "--preset",
-        choices=list_recolor_presets(),
-        help="Named recolor preset (e.g. green, red, cyberpunk)",
-    )
-    target.add_argument(
-        "--hex", dest="target_hex",
-        help="Target color as #RRGGBB",
-    )
-    target.add_argument(
-        "--hue", dest="hue_shift_deg", type=float,
-        help="Relative hue rotation in degrees",
-    )
-
-    rr.add_argument(
-        "--chroma", dest="chroma_scale", type=float, default=None,
-        help="Override chroma scale",
-    )
-    rr.add_argument(
-        "--lightness-gamma", type=float, default=None,
-        help="Override lightness gamma",
-    )
-    rr.add_argument(
-        "--strength", type=float, default=1.0,
-        help="Recolor blend strength 0-1 (default: 1.0)",
-    )
-    rr.add_argument(
-        "--no-protect-highlights",
-        dest="protect_highlights", action="store_false",
-        help="Do not fade chroma in highlights",
-    )
-    rr.add_argument(
-        "--no-protect-shadows",
-        dest="protect_shadows", action="store_false",
-        help="Do not fade chroma in shadows",
-    )
-    rr.add_argument(
-        "--jpeg-quality", type=int, default=95,
-        help="JPEG quality 1-100 (default: 95)",
-    )
-
     # presets
     sub.add_parser("presets", help="List available mosaic presets")
 
@@ -427,54 +302,6 @@ def _cmd_recolor(args: argparse.Namespace) -> int:
     return 0
 
 
-def _parse_bbox(spec: str) -> tuple[int, int, int, int]:
-    parts = spec.replace(" ", "").split(",")
-    if len(parts) != 4:
-        raise ValueError(f"--bbox expects 'y1,x1,y2,x2', got {spec!r}")
-    y1, x1, y2, x2 = (int(p) for p in parts)
-    return y1, x1, y2, x2
-
-
-def _cmd_recolor_region(args: argparse.Namespace) -> int:
-    import cv2  # local import — only used here
-
-    bbox = _parse_bbox(args.bbox) if getattr(args, "bbox", None) else None
-    _result, mask = recolor_region(
-        args.input,
-        args.output,
-        mask=args.mask,
-        bbox=bbox,
-        source_hex=args.source_hex,
-        source_hue_deg=args.source_hue_deg,
-        hue_tolerance_deg=args.hue_tolerance_deg,
-        chroma_min=args.chroma_min,
-        chroma_max=args.chroma_max,
-        lightness_min=args.lightness_min,
-        lightness_max=args.lightness_max,
-        morph_open=args.morph_open,
-        morph_close=args.morph_close,
-        min_area=args.min_area,
-        feather_px=args.feather_px,
-        preset=args.preset,
-        target_hex=args.target_hex,
-        hue_shift_deg=args.hue_shift_deg,
-        chroma_scale=args.chroma_scale,
-        lightness_gamma=args.lightness_gamma,
-        strength=args.strength,
-        protect_highlights=args.protect_highlights,
-        protect_shadows=args.protect_shadows,
-        jpeg_quality=args.jpeg_quality,
-        return_mask=True,
-    )
-    if args.save_mask is not None:
-        Path(args.save_mask).parent.mkdir(parents=True, exist_ok=True)
-        cv2.imwrite(str(args.save_mask), mask)
-        logger.info("Wrote mask %s", args.save_mask)
-    coverage = float(mask.sum()) / 255.0 / float(mask.size) * 100.0
-    logger.info("Wrote %s (region coverage %.1f%%)", args.output, coverage)
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -488,8 +315,6 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_presets(args)
         if args.command == "recolor":
             return _cmd_recolor(args)
-        if args.command == "recolor-region":
-            return _cmd_recolor_region(args)
         if args.command == "recolor-presets":
             return _cmd_recolor_presets(args)
         parser.error(f"Unknown command: {args.command}")

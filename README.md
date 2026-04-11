@@ -16,12 +16,12 @@
 
 What's inside:
 
-- **Oklab perceptual color space** — roughly 8.5× more perceptually uniform than CIELAB for chroma, at the same compute cost.
+- **Oklab perceptual color space** — Björn Ottosson's 2020 colour space, noticeably more uniform than CIELAB on the saturated colours photomosaics spend most of their compute budget matching, at the same compute cost.
 - **MKL optimal transport color transfer** — matches the full covariance of each tile's color distribution to the target, preserving the shape of the original tile instead of flattening it.
 - **Hungarian 1:1 placement** — globally optimal assignment of tiles to cells via the Jonker–Volgenant algorithm. Falls back to FAISS + Floyd–Steinberg error diffusion when the cost matrix exceeds memory.
 - **Laplacian pyramid blending** — removes grid lines without blurring detail.
 - **Oklch tile-pool expansion** — generates N hue-rotated variants of every tile in the pool, multiplying the effective catalog size by (N+1) with zero extra photographs.
-- **Oklch whole-image recoloring** — rotates the finished mosaic through 20+ named presets (or any `#RRGGBB`) while preserving every tile's lightness exactly, so the result has no boundary artifacts.
+- **Oklch whole-image recoloring** — rotates the finished mosaic through 21 named presets (or any `#RRGGBB`) while preserving every tile's lightness exactly, so the result has no boundary artifacts.
 
 The hero image above is reproducible from this repository. `python scripts/download_demo_assets.py` fetches ~8 MB of public-domain paintings and CC0 tiles; `python scripts/generate_readme_figures.py` then writes every image in this README.
 
@@ -90,7 +90,7 @@ recolor("mosaic.jpg", "mosaic_sepia.jpg", preset="sepia")
                   └──────────┬──────────┘
                              │
                   ┌──────────▼──────────┐    ┌────────────────────┐
-                  │  Feature extraction │───▶│ 4x geometric aug.  │
+                  │  Feature extraction │───▶│ 4x flip/brightness │
                   │   (191 dimensions)  │    │ + Oklch variants   │
                   └──────────┬──────────┘    └─────────┬──────────┘
                              │                         │
@@ -125,7 +125,7 @@ recolor("mosaic.jpg", "mosaic_sepia.jpg", preset="sepia")
                                        output
 ```
 
-**Why Oklab?** CIELAB was calibrated on small color differences; it underestimates perceptual distance for the large jumps a photomosaic routinely makes. Oklab ([Björn Ottosson, 2020](https://bottosson.github.io/posts/oklab/)) was rebuilt on modern data and is roughly 8.5× more perceptually uniform for chroma. Dropping it into the cost function is free and visibly improves matches on saturated photos.
+**Why Oklab?** CIELAB was calibrated on small colour differences; it underestimates perceptual distance for the large jumps a photomosaic routinely makes. Oklab ([Björn Ottosson, 2020](https://bottosson.github.io/posts/oklab/)) was rebuilt on modern colour-difference data and is noticeably more uniform on the saturated regions a photomosaic spends most of its compute budget matching. Dropping it into the cost function is free and visibly improves matches on saturated photos.
 
 **Why MKL optimal transport?** Reinhard color transfer matches the first and second moments of the LAB distribution. MKL ([Pitié et al., 2007](https://www.researchgate.net/publication/220056262)) matches the full covariance, so the *shape* of the tile's color distribution is preserved as its statistics slide toward the target cell. Details survive; averages don't win.
 
@@ -143,7 +143,7 @@ One of the hardest problems in photomosaic generation is having enough tiles. A 
 gen = MosaicGenerator(tile_dir="./tiles", preset="vivid", color_variants=4)
 ```
 
-Lightness is preserved exactly, so texture and shading are untouched — only hue and chroma move. For a 1,024-tile pool this turns into **5,120 candidates after Oklch expansion**, or **20,480 after the default 4× geometric augmentation on top**. The Hungarian assignment then has an order of magnitude more material to work with, which is the difference between a mosaic that repeats and a mosaic that doesn't.
+Lightness is preserved exactly, so texture and shading are untouched — only hue and chroma move. For a 1,024-tile pool this turns into **5,120 candidates after Oklch expansion** (1,024 × 5 = original + 4 hue rotations), or **20,480 once the default flip + brightness augmentation is layered on top**. The Hungarian assignment then has an order of magnitude more material to work with.
 
 ## Oklch whole-image recoloring
 
@@ -161,53 +161,6 @@ recolor("mosaic.jpg", "mosaic_shift.jpg", hue_shift_deg=60)
 ```
 
 Under the hood: convert to Oklab, split into L and C·exp(iH), rotate H and scale C, convert back. Optional highlight / shadow chroma fading keeps paper-white and deep-black areas neutral.
-
-## Selective recoloring (regions only)
-
-![Selective recolor: Vermeer turban](docs/images/selective_recolor_turban.jpg)
-
-`recolor()` shifts the hue of every pixel. **`recolor_region()` is the surgical version** — it isolates a single coloured object inside a richer image (a blue turban, a red ribbon, a yellow lantern) and rotates only its hue in Oklch, leaving the rest of the image byte-for-byte identical. Lightness is still preserved exactly, so the recoloured region carries no boundary artifacts.
-
-The mask above is built from a perceptual Oklch colour-range probe — no segmentation model, no GPU, no `transformers` import. The chroma gate drops the near-black background and the lightness gate drops the highlight ridge of the turban; what remains is exactly the blue band:
-
-![Detected mask](docs/images/selective_recolor_mask.png)
-
-Region specification (any one of, in priority order):
-
-1. An explicit binary mask (`mask=` PNG path or `ndarray`).
-2. A rectangular `bbox=(y1, x1, y2, x2)` window.
-3. A perceptual Oklch colour-range mask built from `source_hex=` (default) or `source_hue_deg=`, gated by `hue_tolerance_deg`, `chroma_min/max`, and `lightness_min/max`.
-
-Target colour is the same surface as `recolor()` — `preset=`, `target_hex=`, or `hue_shift_deg=`. The mask is cleaned with morphology + connected-component area filtering and Gaussian feathering for soft edges.
-
-```python
-from mosaicraft import recolor_region
-
-# Detect the blue turban → rotate it to Oklch green.
-recolor_region(
-    "girl.jpg", "green_turban.jpg",
-    source_hex="#3a5d9e",
-    preset="green",
-    hue_tolerance_deg=28,
-    chroma_min=0.04,
-    lightness_min=0.18, lightness_max=0.78,
-)
-
-# Or pass an explicit mask if you already have one.
-recolor_region("girl.jpg", "out.jpg", mask="turban_mask.png", preset="purple")
-
-# Or hand-pick a rectangular region.
-recolor_region("girl.jpg", "out.jpg", bbox=(120, 140, 250, 360), preset="red")
-```
-
-```bash
-mosaicraft recolor-region girl.jpg -o green.jpg \
-    --source-hex "#3a5d9e" --preset green --hue-tolerance 28 \
-    --chroma-min 0.04 --lightness-min 0.18 --lightness-max 0.78 \
-    --save-mask mask.png
-```
-
-`build_oklch_region_mask()` is exposed too if you only want the mask.
 
 ## Presets
 
@@ -240,7 +193,7 @@ Produced by `python benchmarks/benchmark_pipeline.py` — a single `MosaicGenera
 
 ### Large-pool regime (1,024-tile pool, up to 30,000 cells)
 
-Run `python benchmarks/benchmark_pipeline.py --scale large` to reproduce. Every cell is one tile selected from the 1,024 CC0 photograph pool × 4 geometric augmentations = 4,096 candidates. Every case is run cold — tiles loaded from disk on every invocation.
+Run `python benchmarks/benchmark_pipeline.py --scale large` to reproduce. Every cell is one tile selected from the 1,024 CC0 photograph pool × 4 augmentations (1 horizontal flip + 3 brightness shifts) = 4,096 candidates. Every case is run cold — tiles loaded from disk on every invocation.
 
 | preset | metric     | 5,000 cells | 10,000 cells | 20,000 cells | 30,000 cells |
 | ------ | ---------- | ----------: | -----------: | -----------: | -----------: |
@@ -264,32 +217,30 @@ Output: ~14,000 × 14,000 px ≈ 200 megapixels. The dominant memory cost is the
 
 ![Cell diversity vs other tools](docs/images/diversity_chart.jpg)
 
-Cell diversity is the metric that decides whether a photomosaic *looks* like a photomosaic or like a four-colour halftone. mosaicraft is built on a strict 1:1 Hungarian assignment with MKL optimal-transport colour matching, so the same tile cannot occupy multiple cells unless the pool is exhausted — and the Oklch tile-pool expansion (`--color-variants 4`) lifts the diversity ceiling another 35%.
+Cell diversity is what separates a photomosaic from a four-colour halftone — at 8% the grid is essentially the same dozen tiles repeated all over, at 40%+ each cell is its own photo. The chart above shows the metric on Vermeer's *Girl with a Pearl Earring* against a shared 1,024-image CC0 pool, regenerated by `benchmarks/compare_tools.py` and saved to `docs/assets/bench_outputs/metrics.json`.
 
 ![4-painting comparison](docs/images/comparison_four_targets.jpg)
 
 The same `vivid` preset against four very different source styles — Vermeer, Van Gogh, Hokusai's *Great Wave* and *Red Fuji* — using one shared 1,024-image CC0 tile pool. No tile pool was tuned per painting.
 
-![Comparison with zoom detail](docs/images/comparison_zoom.jpg)
-
-*Left: original painting. Right: [codebox/mosaic](https://github.com/codebox/mosaic) (RGB mean matching). Bottom row: detail crop (red box). Same 1,024-tile CC0 pool, 40×40 grid.*
-
-The zoom tells the story. codebox picks whichever ~100 tiles are closest in RGB mean and reuses them freely — cell diversity is **6–8%**, meaning 92% of the grid is the same handful of photos. Compare to the hero image above: mosaicraft's `vivid` preset enforces strict 1:1 Hungarian assignment with MKL optimal-transport color transfer, achieving **38–57% diversity** — every cell is a distinct photograph.
+mosaicraft is not the only library that uses [linear-sum assignment](https://en.wikipedia.org/wiki/Assignment_problem) for tile placement: [`phomo`](https://github.com/loiccoyle/phomo), [`phomo-rs`](https://github.com/loiccoyle/phomo-rs), and [`image-collage-maker`](https://github.com/hanzhi713/image-collage-maker) all do 1:1 placement too. The combination that makes mosaicraft different is **Oklab perceptual colour matching + per-tile MKL optimal-transport colour transfer + Oklch hue-rotation pool expansion** in the same pipeline. To my knowledge no other OSS photomosaic library ships all three.
 
 <details>
 <summary>Pixel metrics (click to expand)</summary>
 
-Target: Vermeer, *Girl with a Pearl Earring*. Grid: 40×40 = 1,600 cells. 1,024 CC0 tiles.
+Target: Vermeer, *Girl with a Pearl Earring*. Grid: 40×40 = 1,600 cells. 1,024 CC0 tiles. Numbers below are read directly from `docs/assets/bench_outputs/metrics.json`; rerun `python benchmarks/compare_tools.py --target pearl_earring.jpg --grid 40` to refresh.
 
 | Tool                              |   Wall | SSIM ↑ | LPIPS ↓ | ΔE2000 ↓ | Diversity ↑ |
 | --------------------------------- | -----: | -----: | ------: | -------: | ----------: |
 | codebox/mosaic (RGB mean)         |  1.3 s |  0.250 |   0.544 |    10.32 |       0.079 |
-| photomosaic 0.3.1 (CIELAB)       |  2.1 s |  0.065 |   0.776 |    37.18 |       0.111 |
+| photomosaic 0.3.1 (CIELAB)        |  2.1 s |  0.065 |   0.776 |    37.18 |       0.111 |
 | mosaicraft `fast`                 | 17.2 s |  0.216 |   0.630 |    10.85 |       0.341 |
 | mosaicraft `vivid`                | 22.2 s |  0.148 |   0.627 |    15.12 |   **0.424** |
-| mosaicraft `vivid --cv 4`        | 77.6 s |  0.224 |   0.559 |    11.06 |   **0.384** |
+| mosaicraft `vivid --cv 4`         | 77.6 s |  0.224 |   0.559 |    11.06 |       0.384 |
 
-SSIM and ΔE2000 reward pixel fidelity, which structurally favors mean-matching tools that reuse the same tiles. LPIPS (Zhang et al., CVPR 2018) correlates better with human judgement. Cell diversity — the fraction of visually distinct cells — is the metric that separates photomosaics from colored grids.
+SSIM and ΔE2000 reward pixel fidelity, which structurally favours mean-matching tools that reuse the same tiles. LPIPS (Zhang et al., CVPR 2018) correlates better with human judgement. Cell diversity counts the number of visually distinct cells (5-bit-quantised mean colour) — at 0.42 the same Vermeer that looks like a flat halftone in `codebox` (0.08) is built from ~670 distinct photos out of 1,600 cells.
+
+`vivid --cv 4` trades a small amount of bucket diversity (0.424 → 0.384) for an LPIPS gain (0.627 → 0.559) and a ΔE2000 improvement (15.12 → 11.06): the 4× hue-rotated pool gives the cost-matrix more colour matches, so cells get colour-closer tiles instead of more *distinct* tiles. Pick `vivid` if cell diversity matters most, `vivid --cv 4` if perceptual fidelity does.
 
 </details>
 
@@ -306,7 +257,7 @@ from mosaicraft import MosaicGenerator, recolor, rotate_hue_oklch
 gen = MosaicGenerator(
     tile_dir="./tiles",          # or cache_dir="./cache"
     preset="vivid",              # preset name or dict
-    augment=True,                # 4x geometric + brightness aug
+    augment=True,                # 4x flip + brightness augmentation
     color_variants=0,            # set to >0 to expand pool via Oklch rotation
 )
 result = gen.generate("photo.jpg", "mosaic.jpg", target_tiles=2000, tile_size=88)
@@ -327,7 +278,7 @@ Helpers:
 - `mosaicraft.build_cache(tile_dir, cache_dir, tile_sizes, thumb_size=120)` — precompute features.
 - `mosaicraft.calc_grid(target_tiles, aspect_w, aspect_h)` — pick a grid for a desired cell count.
 
-Lower-level building blocks live in `mosaicraft.color`, `mosaicraft.features`, `mosaicraft.placement`, `mosaicraft.blending`, `mosaicraft.postprocess`, `mosaicraft.color_augment`, `mosaicraft.recolor`, and `mosaicraft.tiles`.
+Lower-level building blocks live in `mosaicraft.color`, `mosaicraft.features`, `mosaicraft.placement`, `mosaicraft.blending`, `mosaicraft.postprocess`, `mosaicraft.saliency`, `mosaicraft.color_augment`, `mosaicraft.recolor`, `mosaicraft.tiles`, and `mosaicraft.utils`.
 
 ## Reproducible figures
 

@@ -32,7 +32,8 @@ Photomosaic-specific:
 Tools under test (all invoked from a clean subprocess / fresh Python context):
 
   1. **mosaicraft — fast preset**   (ours, Oklab + histograms, optimised for speed)
-  2. **mosaicraft — ultra preset**  (ours, Oklab + MKL OT + Hungarian + SSIM rerank)
+  2. **mosaicraft — vivid preset**  (ours, Oklab + MKL OT + Hungarian + SSIM rerank)
+  2b. **mosaicraft — vivid + cv4**  (ours, vivid preset on a 5×-expanded Oklch pool)
   3. **photomosaic 0.3.1** (danielballan, PyPI) — CIELAB + cKDTree
   4. **codebox/mosaic** (git @ codebox/mosaic) — naive RGB mean matching
 
@@ -45,8 +46,9 @@ Run from the repository root after ``scripts/download_demo_assets.py``::
 Outputs:
 
   * ``docs/assets/bench_outputs/<tool>.jpg`` — each tool's raw output
-  * ``docs/images/comparison.jpg`` — composite figure for the README
   * ``docs/assets/bench_outputs/metrics.json`` — raw numbers
+    (consumed by ``scripts/generate_readme_figures.py`` to render
+    ``docs/images/diversity_chart.jpg``)
   * stdout — Markdown table for the README comparison section
 """
 
@@ -80,7 +82,6 @@ ASSETS_DIR = REPO_ROOT / "docs" / "assets"
 PAINTINGS_DIR = ASSETS_DIR / "paintings"
 TILES_DIR = ASSETS_DIR / "tiles"
 BENCH_DIR = ASSETS_DIR / "bench_outputs"
-COMPARISON_FIG = REPO_ROOT / "docs" / "images" / "comparison.jpg"
 METRICS_JSON = BENCH_DIR / "metrics.json"
 
 # Where we cloned / expect to find codebox/mosaic.
@@ -508,79 +509,6 @@ def make_runner(
 
 
 # --------------------------------------------------------------------------- #
-# Composite figure
-# --------------------------------------------------------------------------- #
-
-
-def _label_panel(img: np.ndarray, title: str, metrics: dict[str, float]) -> np.ndarray:
-    """Draw a header (title + metrics lines) above the image."""
-    h, w = img.shape[:2]
-    pad_top = 150
-    canvas = np.full((h + pad_top, w, 3), 245, dtype=np.uint8)
-    canvas[pad_top:, :, :] = img
-    font = cv2.FONT_HERSHEY_SIMPLEX
-
-    # Wrap title into at most 2 lines.
-    lines = title.split("\n")
-    y = 34
-    for ln in lines:
-        cv2.putText(canvas, ln, (12, y), font, 0.75, (20, 20, 20), 2, cv2.LINE_AA)
-        y += 28
-    if metrics:
-        line1 = "time {t:.1f}s   LPIPS {l:.3f}   SSIM_blur {sb:.3f}".format(
-            t=metrics.get("elapsed_sec", 0.0),
-            l=metrics.get("lpips", 0.0),
-            sb=metrics.get("ssim_blurred", 0.0),
-        )
-        line2 = "SSIM {s:.3f}   dE2000 {d:.1f}   diversity {v:.2f}".format(
-            s=metrics.get("ssim", 0.0),
-            d=metrics.get("delta_e2000_mean", 0.0),
-            v=metrics.get("cell_diversity", 0.0),
-        )
-        cv2.putText(canvas, line1, (12, y + 4), font, 0.52, (60, 60, 60), 1, cv2.LINE_AA)
-        cv2.putText(canvas, line2, (12, y + 26), font, 0.52, (60, 60, 60), 1, cv2.LINE_AA)
-    return canvas
-
-
-def build_comparison_figure(
-    target_bgr: np.ndarray,
-    results: list[ToolResult],
-    out_path: Path,
-) -> None:
-    panel_h, panel_w = 480, 480
-    panels: list[np.ndarray] = []
-
-    def _fit(img: np.ndarray) -> np.ndarray:
-        return cv2.resize(img, (panel_w, panel_h), interpolation=cv2.INTER_AREA)
-
-    panels.append(_label_panel(_fit(target_bgr), "Target\n(reference)", {}))
-    for r in results:
-        if r.output_path is None or not r.output_path.exists():
-            blank = np.full((panel_h, panel_w, 3), 230, dtype=np.uint8)
-            cv2.putText(
-                blank,
-                "(failed)",
-                (80, panel_h // 2),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1.2,
-                (90, 90, 90),
-                2,
-                cv2.LINE_AA,
-            )
-            img = blank
-        else:
-            img = cv2.imread(str(r.output_path))
-            img = _fit(img)
-        metrics_stub = {"elapsed_sec": r.elapsed_sec, **r.metrics}
-        panels.append(_label_panel(img, r.tool_label, metrics_stub))
-
-    composite = np.hstack(panels)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    cv2.imwrite(str(out_path), composite, [cv2.IMWRITE_JPEG_QUALITY, 92])
-    print(f"  wrote {out_path.relative_to(REPO_ROOT)} ({composite.shape[1]}x{composite.shape[0]})")
-
-
-# --------------------------------------------------------------------------- #
 # Markdown report
 # --------------------------------------------------------------------------- #
 
@@ -717,14 +645,11 @@ def main() -> int:
         )
         results.append(result)
 
-    # Build composite figure.
-    print("\nbuilding comparison figure ...")
-    try:
-        build_comparison_figure(target_bgr, results, COMPARISON_FIG)
-    except Exception as e:
-        print(f"  WARNING: figure build failed: {e}")
-
-    # Save metrics JSON.
+    # Save metrics JSON. (Composite figure rendering moved out of this
+    # benchmark script — `scripts/generate_readme_figures.py` now reads
+    # METRICS_JSON and renders `docs/images/diversity_chart.jpg` from it,
+    # so the bench script doesn't have to know anything about README
+    # layout.)
     METRICS_JSON.write_text(
         json.dumps(
             {

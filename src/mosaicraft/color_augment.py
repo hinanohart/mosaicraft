@@ -10,8 +10,8 @@ rotations in Oklch. Rotating hue in Oklch:
 
 * keeps lightness (Oklab L) exact, so every tile retains its edge structure
   and texture,
-* is perceptually smoother than HSV or CIELCH rotation (Björn Ottosson,
-  2020: Oklab is roughly 8.5x more uniform for chroma),
+* is perceptually smoother than HSV or CIELCH rotation
+  (Björn Ottosson, 2020),
 * introduces no boundary artifacts because L is untouched.
 
 The net effect is to turn an ``N``-tile pool into an ``N * (1 + k)``-tile
@@ -31,7 +31,7 @@ Example
     pool = expand_color_variants(base, n_variants=4, tile_size=56)
     # pool now contains 1,024 * 5 = 5,120 tiles:
     #   - the originals
-    #   - 4 Oklch-hue-rotated variants per tile (90°, 180°, 270°, and a mid angle)
+    #   - 4 Oklch-hue-rotated variants per tile (72°, 144°, 216°, 288°)
 
 Design notes
 ------------

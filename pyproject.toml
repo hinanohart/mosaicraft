@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mosaicraft"
-version = "0.3.0"
-description = "Perceptual photomosaic generator — Oklab color matching, MKL optimal transport, Hungarian placement, Oklch tile-pool expansion, and selective recoloring"
+version = "0.3.1"
+description = "Perceptual photomosaic generator — Oklab color matching, MKL optimal transport, Hungarian placement, and Oklch tile-pool expansion + recoloring"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
@@ -57,10 +57,6 @@ dev = [
     "bandit>=1.7",
     "build>=1.0",
     "twine>=4.0",
-]
-docs = [
-    "mkdocs>=1.5",
-    "mkdocs-material>=9.0",
 ]
 
 [project.urls]

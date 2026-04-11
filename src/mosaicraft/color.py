@@ -7,8 +7,9 @@ This module implements:
     * Histogram matching color transfer.
     * Hybrid color transfer methods.
 
-Oklab is a perceptual color space designed to be more uniform than CIELAB,
-with approximately 8.5x improved perceptual accuracy for chroma.
+Oklab is a perceptual color space (Björn Ottosson, 2020) designed to be
+noticeably more uniform than CIELAB on saturated colours, which is the
+regime a photomosaic spends most of its compute budget in.
 
 References:
     Björn Ottosson, "A perceptual color space for image processing":

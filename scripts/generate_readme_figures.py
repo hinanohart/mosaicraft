@@ -111,17 +111,33 @@ def _label_bar(
     bg: tuple[int, int, int] = (22, 22, 24),
     fg: tuple[int, int, int] = (240, 240, 240),
     font_scale: float = 0.9,
+    min_pad: int = 12,
 ) -> np.ndarray:
+    """Render a label bar that auto-shrinks the font when the text overflows.
+
+    Bug history: the previous version computed ``x = (width - tw) // 2`` and
+    silently let cv2.putText clip the left edge when ``tw > width`` —
+    every "Target: Vermeer..." caption was rendering as "t: Vermeer...".
+    The fix shrinks ``font_scale`` until the text fits with at least
+    ``min_pad`` pixels on each side, falling back to a hard floor at
+    ``font_scale = 0.35`` so labels stay legible.
+    """
     bar = np.full((height, width, 3), bg, dtype=np.uint8)
-    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_DUPLEX, font_scale, 1)
-    x = (width - tw) // 2
+    available = max(1, width - 2 * min_pad)
+    fs = float(font_scale)
+    while True:
+        (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_DUPLEX, fs, 1)
+        if tw <= available or fs <= 0.35:
+            break
+        fs = max(0.35, fs * 0.9)
+    x = max(min_pad, (width - tw) // 2)
     y = (height + th) // 2 - 2
     cv2.putText(
         bar,
         text,
         (x, y),
         cv2.FONT_HERSHEY_DUPLEX,
-        font_scale,
+        fs,
         fg,
         1,
         cv2.LINE_AA,
@@ -207,14 +223,24 @@ def make_before_after(
 def make_presets_comparison(
     mosaics: dict[str, np.ndarray], out_path: Path
 ) -> None:
-    order = ["vivid", "ultra", "natural"]
-    imgs = [mosaics[p] for p in order]
-    labels = [
-        "vivid (MKL optimal transport)",
-        "ultra (Hungarian + Laplacian)",
-        "natural (restrained saturation)",
-    ]
-    fig = _hstack_with_labels(imgs, labels, target_h=620, gap=12)
+    """5-up preset comparison covering every preset shipped in `presets.py`."""
+    order = ["vivid", "ultra", "natural", "tile", "fast"]
+    imgs: list[np.ndarray] = []
+    labels: list[str] = []
+    label_map = {
+        "vivid":   "vivid (MKL OT, recommended)",
+        "ultra":   "ultra (Hungarian + Laplacian)",
+        "natural": "natural (restrained saturation)",
+        "tile":    "tile (mosaic look)",
+        "fast":    "fast (FAISS + error diffusion)",
+    }
+    for key in order:
+        if key in mosaics:
+            imgs.append(mosaics[key])
+            labels.append(label_map[key])
+    if not imgs:
+        return
+    fig = _hstack_with_labels(imgs, labels, target_h=540, gap=10)
     cv2.imwrite(str(out_path), fig, [cv2.IMWRITE_JPEG_QUALITY, _JPEG_Q])
 
 
@@ -382,170 +408,181 @@ def make_four_target_comparison(
     cv2.imwrite(str(out_path), fig, [cv2.IMWRITE_JPEG_QUALITY, _JPEG_Q])
 
 
-def make_diversity_chart(out_path: Path) -> None:
-    """Cell-diversity bar chart — pure cv2/numpy, no matplotlib dependency.
+_DIVERSITY_BAR_COLORS = {
+    "codebox":              (180, 180, 180),
+    "photomosaic_py":       (200, 200, 200),
+    "mosaicraft_fast":      (140, 200, 120),
+    "mosaicraft_vivid":     (120, 180, 240),
+    "mosaicraft_vivid_cv4": (80, 120, 250),
+}
 
-    Numbers come from benchmarks/compare_tools.py against the same Vermeer
-    target / pool. ``mosaicraft vivid + cv4`` is the headline figure: 4 hue
-    variants per tile, optimal-transport color match, Hungarian assignment.
+_DIVERSITY_BAR_LABELS = {
+    "codebox":              "codebox/mosaic",
+    "photomosaic_py":       "photomosaic 0.3.1",
+    "mosaicraft_fast":      "mosaicraft fast",
+    "mosaicraft_vivid":     "mosaicraft vivid",
+    "mosaicraft_vivid_cv4": "mosaicraft vivid + cv4",
+}
+
+
+def make_diversity_chart(out_path: Path) -> None:
+    """Cell-diversity bar chart, rendered from the live benchmark JSON.
+
+    The previous version of this function hard-coded the bar values in
+    Python, drifted away from `benchmarks/compare_tools.py`, and ended up
+    showing a fictitious 57% bar for ``mosaicraft vivid + cv4``. The
+    real metric is 0.384, not 0.57. This version reads
+    ``docs/assets/bench_outputs/metrics.json`` (the on-disk output of
+    `benchmarks/compare_tools.py`) and refuses to render if the file is
+    missing — better an explicit error than a fabricated bar.
     """
-    bars = [
-        ("codebox",                 0.08, (180, 180, 180)),
-        ("photomosaic (worldveil)", 0.11, (200, 200, 200)),
-        ("mosaicraft natural",      0.30, (140, 200, 120)),
-        ("mosaicraft vivid",        0.42, (120, 180, 240)),
-        ("mosaicraft vivid + cv4",  0.57, ( 80, 120, 250)),
-    ]
-    width = 1080
-    height = 460
-    pad_left = 280
-    pad_right = 60
-    pad_top = 70
+    metrics_path = REPO_ROOT / "docs" / "assets" / "bench_outputs" / "metrics.json"
+    if not metrics_path.exists():
+        raise SystemExit(
+            f"{metrics_path} not found. "
+            "Run `python benchmarks/compare_tools.py "
+            "--target pearl_earring.jpg --grid 40` first."
+        )
+    payload = json.loads(metrics_path.read_text())
+    bars: list[tuple[str, float, tuple[int, int, int]]] = []
+    for entry in payload.get("results", []):
+        tool_id = entry.get("tool_id", "")
+        diversity = float(entry.get("metrics", {}).get("cell_diversity", 0.0))
+        label = _DIVERSITY_BAR_LABELS.get(tool_id, tool_id)
+        color = _DIVERSITY_BAR_COLORS.get(tool_id, (160, 160, 160))
+        bars.append((label, diversity, color))
+
+    width = 1180
+    height = 480
+    pad_left = 320
+    pad_right = 80
+    pad_top = 80
     pad_bot = 70
     bar_area_w = width - pad_left - pad_right
     bar_area_h = height - pad_top - pad_bot
     canvas = np.full((height, width, 3), 22, dtype=np.uint8)
 
     cv2.putText(
-        canvas, "Cell diversity (1 - max-tile-frequency, higher is better)",
-        (pad_left - 200, 36),
+        canvas,
+        f"Cell diversity on {payload.get('target', '?')} (higher is better)",
+        (32, 40),
         cv2.FONT_HERSHEY_DUPLEX, 0.7, (240, 240, 240), 1, cv2.LINE_AA,
     )
 
+    if not bars:
+        cv2.imwrite(str(out_path), canvas, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        return
+
+    # Auto-scale the x axis to a sensible round number above the max bar.
+    max_val = max(v for _, v, _ in bars)
+    x_max = max(0.10, np.ceil(max_val * 12) / 10)  # nearest 0.083 above max
+    x_max = min(1.0, max(x_max, max_val * 1.15))
+
     n = len(bars)
-    bar_h = bar_area_h // n - 14
+    bar_h = max(20, bar_area_h // n - 16)
     for i, (name, val, color) in enumerate(bars):
-        y = pad_top + i * (bar_h + 14)
-        bar_w = int(val * bar_area_w / 0.65)
-        # Background rule.
-        cv2.line(canvas, (pad_left, y + bar_h + 7), (width - pad_right, y + bar_h + 7), (60, 60, 60), 1)
+        y = pad_top + i * (bar_h + 16)
+        bar_w = int(val * bar_area_w / x_max)
+        cv2.line(
+            canvas,
+            (pad_left, y + bar_h + 8),
+            (width - pad_right, y + bar_h + 8),
+            (60, 60, 60), 1,
+        )
         cv2.rectangle(
             canvas,
             (pad_left, y),
             (pad_left + bar_w, y + bar_h),
             color, -1,
         )
-        # Tool name (right-aligned to bar start).
         cv2.putText(
-            canvas, name, (16, y + bar_h - 8),
+            canvas, name, (16, y + bar_h - 9),
             cv2.FONT_HERSHEY_DUPLEX, 0.55, (240, 240, 240), 1, cv2.LINE_AA,
         )
-        # Value at bar tip.
         cv2.putText(
-            canvas, f"{val * 100:.0f}%",
-            (pad_left + bar_w + 10, y + bar_h - 6),
+            canvas, f"{val * 100:.1f}%",
+            (pad_left + bar_w + 10, y + bar_h - 7),
             cv2.FONT_HERSHEY_DUPLEX, 0.6, (240, 240, 240), 1, cv2.LINE_AA,
         )
 
     cv2.putText(
-        canvas, "source: benchmarks/compare_tools.py - Vermeer Pearl Earring, 1024 CC0 tiles",
+        canvas,
+        "source: docs/assets/bench_outputs/metrics.json (compare_tools.py)",
         (16, height - 18),
         cv2.FONT_HERSHEY_DUPLEX, 0.45, (160, 160, 160), 1, cv2.LINE_AA,
     )
     cv2.imwrite(str(out_path), canvas, [cv2.IMWRITE_JPEG_QUALITY, 92])
 
 
-def make_selective_recolor_figure(
-    base_image: np.ndarray, out_path: Path,
-) -> None:
-    """4x2 selective-recolor demo on the Vermeer turban.
-
-    Lives in the same script so the README figure pipeline is one
-    command. Uses the public ``recolor_region`` API.
-    """
-    from mosaicraft.recolor import (
-        _hex_to_bgr,
-        _hue_from_bgr,
-        build_oklch_region_mask,
-        recolor_region,
-    )
-
-    TURBAN_BLUE = "#3a5d9e"
-    TOL = 28.0
-    CHROMA_MIN = 0.04
-    LMIN, LMAX = 0.18, 0.78
-
-    fig_h = 420
-    fig_w = int(base_image.shape[1] * fig_h / base_image.shape[0])
-    base = cv2.resize(base_image, (fig_w, fig_h), interpolation=cv2.INTER_AREA)
-
-    b, g, r = _hex_to_bgr(TURBAN_BLUE)
-    hue = _hue_from_bgr(b, g, r)
-    mask = build_oklch_region_mask(
-        base, hue_center_deg=hue, hue_tolerance_deg=TOL,
-        chroma_min=CHROMA_MIN, lightness_min=LMIN, lightness_max=LMAX,
-        morph_open=3, morph_close=7, min_area=400,
-    )
-
-    panels: list[tuple[np.ndarray, str]] = [(base, "Original")]
-
-    highlight = base.copy()
-    highlight[mask > 0] = (
-        0.4 * highlight[mask > 0] + 0.6 * np.array([255, 255, 255])
-    ).astype(np.uint8)
-    panels.append((highlight, "Detected: blue turban"))
-
-    for label_text, preset, overrides in [
-        ("Emerald",      "green",     {}),
-        ("Crimson",      "red",       {}),
-        ("Royal violet", "purple",    {}),
-        ("Solar gold",   "yellow",    {"chroma_scale": 1.05}),
-        ("Mint",         "mint",      {}),
-        ("Cyberpunk",    "cyberpunk", {}),
-    ]:
-        out = recolor_region(
-            base,
-            source_hex=TURBAN_BLUE,
-            hue_tolerance_deg=TOL,
-            chroma_min=CHROMA_MIN,
-            lightness_min=LMIN, lightness_max=LMAX,
-            morph_open=3, morph_close=7, min_area=400,
-            feather_px=4,
-            preset=preset,
-            **overrides,
-        )
-        panels.append((out, label_text))
-
-    bar_h = 38
-    cols = 4
-    panel_w = panels[0][0].shape[1]
-    panel_h = panels[0][0].shape[0]
-    gap = 8
-    grid_w = cols * panel_w + (cols + 1) * gap
-    rows = (len(panels) + cols - 1) // cols
-    grid_h = rows * (panel_h + bar_h + gap) + gap
-    grid = np.full((grid_h, grid_w, 3), 18, dtype=np.uint8)
-    for i, (im, lab) in enumerate(panels):
-        r_idx, c_idx = divmod(i, cols)
-        x = gap + c_idx * (panel_w + gap)
-        y = gap + r_idx * (panel_h + bar_h + gap)
-        grid[y : y + panel_h, x : x + panel_w] = im
-        bar = _label_bar(panel_w, lab, height=bar_h, font_scale=0.6)
-        grid[y + panel_h : y + panel_h + bar_h, x : x + panel_w] = bar
-
-    cv2.imwrite(str(out_path), grid, [cv2.IMWRITE_JPEG_QUALITY, _JPEG_Q])
-
-
 def make_paintings_gallery(
-    manifest: dict, out_path: Path, *, target_h: int = 520
+    manifest: dict,
+    out_path: Path,
+    *,
+    target_h: int = 360,
+    multi_targets: dict[str, np.ndarray] | None = None,
+    multi_mosaics: dict[str, np.ndarray] | None = None,
 ) -> None:
-    """4-up gallery of all public-domain paintings with artist labels."""
+    """Original-vs-mosaic gallery for every public-domain painting.
+
+    Earlier this function only showed the original paintings, which left
+    readers with no idea what mosaicraft *did* to them. The new layout is
+    a 4-row x 2-column grid: each row pairs the original painting with
+    its `vivid` mosaic, so the gallery doubles as a small "before / after"
+    spread for each artist.
+    """
     entries = manifest.get("paintings", [])
     if not entries:
         return
-    imgs = []
-    labels = []
+    multi_targets = multi_targets or {}
+    multi_mosaics = multi_mosaics or {}
+
+    rows: list[np.ndarray] = []
+    bar_h = 38
+    gap = 10
     for entry in entries:
-        src = ASSETS_DIR / entry["path"]
-        im = cv2.imread(str(src))
-        if im is None:
+        src_path = entry["path"]
+        # MANIFEST stores paths relative to docs/assets/.
+        for key, fname in TARGET_CHOICES.items():
+            if src_path.endswith(fname):
+                target_key = key
+                break
+        else:
             continue
-        imgs.append(im)
+        original = multi_targets.get(target_key)
+        mosaic = multi_mosaics.get(target_key)
+        if original is None:
+            original = cv2.imread(str(ASSETS_DIR / src_path))
+        if original is None or mosaic is None:
+            continue
+
         artist_last = entry["artist"].split()[-1]
-        labels.append(f"{artist_last} - {entry['title']}")
-    if not imgs:
+        title = entry["title"]
+        left = _fit_height(original, target_h)
+        right = _fit_height(mosaic, target_h)
+        widths = [left.shape[1], right.shape[1]]
+        row_w = sum(widths) + gap * 3
+        row = np.full((bar_h + target_h + gap, row_w, 3), 22, dtype=np.uint8)
+        x = gap
+        for im, lab in (
+            (left, f"{artist_last} - {title} (original)"),
+            (right, f"{artist_last} - {title} (mosaicraft vivid)"),
+        ):
+            w = im.shape[1]
+            row[0:bar_h, x : x + w] = _label_bar(w, lab, height=bar_h, font_scale=0.65)
+            row[bar_h : bar_h + target_h, x : x + w] = im
+            x += w + gap
+        rows.append(row)
+
+    if not rows:
         return
-    fig = _hstack_with_labels(imgs, labels, target_h=target_h, gap=10)
+    max_w = max(r.shape[1] for r in rows)
+    padded = []
+    for r in rows:
+        if r.shape[1] < max_w:
+            pad = np.full((r.shape[0], max_w - r.shape[1], 3), 22, dtype=np.uint8)
+            r = np.hstack([r, pad])
+        padded.append(r)
+    fig = np.vstack(padded)
     cv2.imwrite(str(out_path), fig, [cv2.IMWRITE_JPEG_QUALITY, _JPEG_Q])
 
 
@@ -623,9 +660,10 @@ def main() -> int:
         )
     print(f"[2/4] Using {n_tiles} CC0 tiles from {TILES_DIR.relative_to(REPO_ROOT)}")
 
-    # 3. Mosaics
+    # 3. Mosaics — render every preset shipped in `presets.py` so the
+    #    presets_comparison figure isn't a partial subset of the README table.
     mosaics: dict[str, np.ndarray] = {}
-    for preset in ["natural", "ultra", "vivid"]:
+    for preset in ["vivid", "ultra", "natural", "tile", "fast"]:
         t0 = time.perf_counter()
         print(f"[3/4] Rendering mosaic (preset={preset}, cells={n_cells}) ...")
         gen = MosaicGenerator(tile_dir=TILES_DIR, preset=preset)
@@ -682,7 +720,12 @@ def main() -> int:
     make_presets_comparison(mosaics, args.output_dir / "presets_comparison.jpg")
     make_zoom_detail(mosaics["vivid"], args.output_dir / "zoom_detail.jpg")
     make_tiles_sample(TILES_DIR, args.output_dir / "tiles_sample.jpg")
-    make_paintings_gallery(manifest, args.output_dir / "paintings_gallery.jpg")
+    make_paintings_gallery(
+        manifest,
+        args.output_dir / "paintings_gallery.jpg",
+        multi_targets=multi_targets,
+        multi_mosaics=multi_mosaics,
+    )
     make_recolor_gallery(mosaics["vivid"], args.output_dir / "recolor_gallery.jpg")
     if not args.skip_grid and len(multi_mosaics) >= 2:
         make_four_target_comparison(
@@ -690,9 +733,6 @@ def main() -> int:
             args.output_dir / "comparison_four_targets.jpg",
         )
     make_diversity_chart(args.output_dir / "diversity_chart.jpg")
-    make_selective_recolor_figure(
-        target, args.output_dir / "selective_recolor_turban.jpg",
-    )
     print(f"     figures ready in {time.perf_counter() - t0:.1f}s")
 
     if not args.keep_work:

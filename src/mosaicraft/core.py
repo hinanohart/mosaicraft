@@ -6,7 +6,7 @@ Typical use::
 
     gen = MosaicGenerator(
         tile_dir="path/to/tiles",
-        preset="ultra",
+        preset="vivid",
     )
     gen.generate("input.jpg", "output.jpg", target_tiles=2000)
 """
@@ -94,7 +94,7 @@ class MosaicGenerator:
         tile_dir: str | os.PathLike[str] | None = None,
         *,
         cache_dir: str | os.PathLike[str] | None = None,
-        preset: str | dict[str, Any] = "ultra",
+        preset: str | dict[str, Any] = "vivid",
         augment: bool = True,
         color_variants: int = 0,
         hungarian_mem_limit_mb: float = DEFAULT_HUNGARIAN_MEM_LIMIT_MB,
