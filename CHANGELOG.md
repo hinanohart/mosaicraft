@@ -7,6 +7,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-11
+
+### Added
+
+* **Selective recoloring** (`mosaicraft.recolor.recolor_region`, new public
+  function and `mosaicraft recolor-region` CLI subcommand). Where `recolor()`
+  shifts the hue of every pixel, `recolor_region()` is the surgical version:
+  it isolates a single coloured object — a blue turban, a red ribbon, a
+  yellow lantern — and rotates only its hue in Oklch, leaving the rest of
+  the image byte-for-byte identical. Lightness is still preserved exactly,
+  so the recoloured region carries no boundary artifacts.
+
+  Region specification is one of, in priority order:
+
+  1. An explicit binary mask (`mask=` PNG path or `ndarray`).
+  2. A rectangular `bbox=(y1, x1, y2, x2)` window.
+  3. A perceptual Oklch colour-range mask built from `source_hex=`
+     (default behaviour) or `source_hue_deg=`, with `hue_tolerance_deg`,
+     `chroma_min/max`, and `lightness_min/max` gates.
+
+  Target colour is specified the same way as `recolor()`
+  (`preset=`, `target_hex=`, or `hue_shift_deg=`). The mask is cleaned
+  with morphology + connected-component area filtering and Gaussian
+  feathering for soft edges. Returns the recoloured BGR image, or
+  `(image, mask)` when `return_mask=True`.
+
+  ```python
+  from mosaicraft import recolor_region
+
+  recolor_region(
+      "girl.jpg", "green_turban.jpg",
+      source_hex="#3a5d9e",     # detect the blue turban
+      preset="green",            # rotate to Oklch green
+      hue_tolerance_deg=28,
+  )
+  ```
+
+  ```bash
+  mosaicraft recolor-region girl.jpg -o green.jpg \
+      --source-hex "#3a5d9e" --preset green --hue-tolerance 28
+  ```
+
+* `build_oklch_region_mask()` — public helper that returns the binary
+  Oklch colour-range mask used by `recolor_region`. Useful for previewing
+  the detected region before committing to a recolour.
+* `scripts/generate_recolor_region_demo.py` — standalone demo script that
+  builds the Vermeer turban gallery (eight panels: original, detected
+  mask, and six target colours) without touching the rest of the README
+  figure pipeline.
+* New README figures committed under `docs/images/`:
+  * `selective_recolor_turban.jpg` — 4×2 panel gallery of the Vermeer
+    turban recoloured to six different hues, plus the detected mask.
+  * `selective_recolor_mask.png` — the raw binary mask, so the README
+    can show the reader exactly which pixels were detected.
+  * `diversity_chart.jpg` — pure-cv2 horizontal bar chart visualising
+    cell diversity vs. `codebox` and `worldveil/photomosaic` (8% / 11% /
+    30% / 42% / 57%). Renders without a `matplotlib` dependency.
+  * `comparison_four_targets.jpg` — 4-painting before/after grid
+    (Vermeer, Van Gogh, Hokusai ×2) showing the same `vivid` preset
+    against four very different source styles in one figure.
+* `scripts/generate_readme_figures.py` learned `--skip-grid`, the
+  `make_four_target_comparison`, `make_diversity_chart`, and
+  `make_selective_recolor_figure` figure makers, plus a 3b. multi-target
+  mosaic stage that renders the other three paintings at a smaller cell
+  budget when the headline grid is requested.
+* `tests/test_recolor.py` grew a `TestRegionMask` and `TestRecolorRegion`
+  class (10 new tests covering colour-range masks, explicit masks,
+  bounding boxes, bbox clipping, empty masks, file IO, feathering, and
+  the `return_mask` tuple form). Total recolor test count is now 34.
+
+### Changed
+
+* `mosaicraft.__version__` is now `"0.3.0"`. The top-level package
+  re-exports `recolor_region` and `build_oklch_region_mask`.
+
 ## [0.2.0] - 2026-04-10
 
 ### Added
@@ -92,6 +167,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * 47 unit and end-to-end tests using synthetically generated fixtures.
 * MIT license, contributor docs, security policy, and code of conduct.
 
-[Unreleased]: https://github.com/hinanohart/mosaicraft/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/hinanohart/mosaicraft/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/hinanohart/mosaicraft/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/hinanohart/mosaicraft/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/hinanohart/mosaicraft/releases/tag/v0.1.0

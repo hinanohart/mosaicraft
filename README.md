@@ -162,6 +162,53 @@ recolor("mosaic.jpg", "mosaic_shift.jpg", hue_shift_deg=60)
 
 Under the hood: convert to Oklab, split into L and C·exp(iH), rotate H and scale C, convert back. Optional highlight / shadow chroma fading keeps paper-white and deep-black areas neutral.
 
+## Selective recoloring (regions only)
+
+![Selective recolor: Vermeer turban](docs/images/selective_recolor_turban.jpg)
+
+`recolor()` shifts the hue of every pixel. **`recolor_region()` is the surgical version** — it isolates a single coloured object inside a richer image (a blue turban, a red ribbon, a yellow lantern) and rotates only its hue in Oklch, leaving the rest of the image byte-for-byte identical. Lightness is still preserved exactly, so the recoloured region carries no boundary artifacts.
+
+The mask above is built from a perceptual Oklch colour-range probe — no segmentation model, no GPU, no `transformers` import. The chroma gate drops the near-black background and the lightness gate drops the highlight ridge of the turban; what remains is exactly the blue band:
+
+![Detected mask](docs/images/selective_recolor_mask.png)
+
+Region specification (any one of, in priority order):
+
+1. An explicit binary mask (`mask=` PNG path or `ndarray`).
+2. A rectangular `bbox=(y1, x1, y2, x2)` window.
+3. A perceptual Oklch colour-range mask built from `source_hex=` (default) or `source_hue_deg=`, gated by `hue_tolerance_deg`, `chroma_min/max`, and `lightness_min/max`.
+
+Target colour is the same surface as `recolor()` — `preset=`, `target_hex=`, or `hue_shift_deg=`. The mask is cleaned with morphology + connected-component area filtering and Gaussian feathering for soft edges.
+
+```python
+from mosaicraft import recolor_region
+
+# Detect the blue turban → rotate it to Oklch green.
+recolor_region(
+    "girl.jpg", "green_turban.jpg",
+    source_hex="#3a5d9e",
+    preset="green",
+    hue_tolerance_deg=28,
+    chroma_min=0.04,
+    lightness_min=0.18, lightness_max=0.78,
+)
+
+# Or pass an explicit mask if you already have one.
+recolor_region("girl.jpg", "out.jpg", mask="turban_mask.png", preset="purple")
+
+# Or hand-pick a rectangular region.
+recolor_region("girl.jpg", "out.jpg", bbox=(120, 140, 250, 360), preset="red")
+```
+
+```bash
+mosaicraft recolor-region girl.jpg -o green.jpg \
+    --source-hex "#3a5d9e" --preset green --hue-tolerance 28 \
+    --chroma-min 0.04 --lightness-min 0.18 --lightness-max 0.78 \
+    --save-mask mask.png
+```
+
+`build_oklch_region_mask()` is exposed too if you only want the mask.
+
 ## Presets
 
 | Preset    | Best for                                                   |
@@ -214,6 +261,14 @@ The 30,000-cell output is **8,904 × 10,472 px ≈ 93 megapixels** and the finis
 Output: ~14,000 × 14,000 px ≈ 200 megapixels. The dominant memory cost is the dense Hungarian cost matrix (`n_cells × n_candidates × 8 bytes`); `fast` avoids it via FAISS.
 
 ## Compared against other photomosaic OSS
+
+![Cell diversity vs other tools](docs/images/diversity_chart.jpg)
+
+Cell diversity is the metric that decides whether a photomosaic *looks* like a photomosaic or like a four-colour halftone. mosaicraft is built on a strict 1:1 Hungarian assignment with MKL optimal-transport colour matching, so the same tile cannot occupy multiple cells unless the pool is exhausted — and the Oklch tile-pool expansion (`--color-variants 4`) lifts the diversity ceiling another 35%.
+
+![4-painting comparison](docs/images/comparison_four_targets.jpg)
+
+The same `vivid` preset against four very different source styles — Vermeer, Van Gogh, Hokusai's *Great Wave* and *Red Fuji* — using one shared 1,024-image CC0 tile pool. No tile pool was tuned per painting.
 
 ![Comparison with zoom detail](docs/images/comparison_zoom.jpg)
 
