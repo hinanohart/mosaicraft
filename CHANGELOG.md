@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-04-11
+
+This is a follow-up to v0.3.1 that fixes the post-publish audit findings —
+all of these are blockers a v0.3.1 user would have hit immediately.
+
+### Security
+
+* **`opencv-python` floor raised from `>=4.6` to `>=4.8.1.78`** to close
+  CVE-2023-4863 (the libwebp heap overflow / Chrome 0day). The bundled
+  opencv-python in v0.3.1 already resolved to 4.13 in practice, but the
+  loose floor admitted vulnerable versions for downstream users with
+  reproducible-build lockfiles. `numpy`, `scipy`, and `scikit-image`
+  floors tightened in the same commit.
+
+### Fixed
+
+* **PyPI README rendered with broken images.** All nine
+  `![...](docs/images/X.jpg)` references and every relative repo link
+  (`LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, `src/...`,
+  `docs/assets/...`, `benchmarks/...`) have been rewritten to absolute
+  `https://raw.githubusercontent.com/hinanohart/mosaicraft/main/...`
+  URLs so PyPI's `pypi.org/project/mosaicraft/` page actually shows the
+  hero, the diversity chart, and the gallery. v0.3.1's PyPI page was a
+  broken-image graveyard.
+* **`from mosaicraft import recolor_region` after upgrading from
+  v0.3.0** previously raised the bare
+  `ImportError: cannot import name 'recolor_region' from 'mosaicraft'`.
+  `mosaicraft/__init__.py` now defines a `__getattr__` shim that
+  raises a richer error pointing at the v0.3.0 pin and the upstream
+  issue tracker, so users who skip the CHANGELOG still find their way
+  out.
+* **`mosaicraft generate` with a tile pool smaller than the requested
+  cell count** previously crashed inside `scipy.optimize.linear_sum_assignment`
+  with a generic `ValueError: cost matrix is infeasible`.
+  `MosaicGenerator._compose_grid` now validates `n_tiles >= n_cells`
+  up-front for Hungarian placement and raises a clear error suggesting
+  `--target-tiles N` or `--preset fast`.
+* **`mosaicraft recolor-region`** (the withdrawn v0.3.0 subcommand) now
+  exits with a custom message pointing at the v0.3.0 pin instead of
+  argparse's generic `invalid choice` error.
+* **`make_diversity_chart` x-axis math** rounded to a meaningless step
+  (the `np.ceil(max_val * 12) / 10` line claimed to round to "the
+  nearest 0.083" — it didn't), and could squeeze the largest bar
+  against the right margin when the auto-scaled `x_max` was clamped to
+  1.0. Replaced with a clean "round up to the next 0.1" rule.
+* **`make_diversity_chart` SystemExit on missing metrics.json** killed
+  every other figure in the pipeline if the user ran
+  `scripts/generate_readme_figures.py` on a fresh clone without first
+  running the benchmark. The function now returns `False` and the
+  caller logs a soft warning.
+* CHANGELOG link table no longer orphans the `[0.3.0]` compare URL —
+  v0.3.0 is marked `[YANKED-LIKE]` (the release stays on PyPI for
+  pinning compatibility, but every public symbol it added has been
+  withdrawn in v0.3.1).
+
+### Added
+
+* README "Upgrading from v0.3.0?" notice at the very top so the
+  migration path is the first thing every reader sees, not buried in
+  the CHANGELOG.
+
 ## [0.3.1] - 2026-04-11
 
 ### Removed (deliberate withdrawal of v0.3.0 features)
@@ -168,7 +229,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * 47 unit and end-to-end tests using synthetically generated fixtures.
 * MIT license, contributor docs, security policy, and code of conduct.
 
-[Unreleased]: https://github.com/hinanohart/mosaicraft/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/hinanohart/mosaicraft/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/hinanohart/mosaicraft/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/hinanohart/mosaicraft/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/hinanohart/mosaicraft/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/hinanohart/mosaicraft/compare/v0.1.0...v0.2.0

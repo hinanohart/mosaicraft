@@ -425,25 +425,19 @@ _DIVERSITY_BAR_LABELS = {
 }
 
 
-def make_diversity_chart(out_path: Path) -> None:
-    """Cell-diversity bar chart, rendered from the live benchmark JSON.
+def _load_diversity_bars(metrics_path: Path) -> tuple[list[tuple[str, float, tuple[int, int, int]]], str]:
+    """Read metrics.json and return bar tuples + the target label.
 
-    The previous version of this function hard-coded the bar values in
-    Python, drifted away from `benchmarks/compare_tools.py`, and ended up
-    showing a fictitious 57% bar for ``mosaicraft vivid + cv4``. The
-    real metric is 0.384, not 0.57. This version reads
-    ``docs/assets/bench_outputs/metrics.json`` (the on-disk output of
-    `benchmarks/compare_tools.py`) and refuses to render if the file is
-    missing — better an explicit error than a fabricated bar.
+    Returns ``([], "?")`` when the file is missing or unreadable, so the
+    caller can decide whether to skip the chart instead of crashing the
+    whole figure pipeline.
     """
-    metrics_path = REPO_ROOT / "docs" / "assets" / "bench_outputs" / "metrics.json"
     if not metrics_path.exists():
-        raise SystemExit(
-            f"{metrics_path} not found. "
-            "Run `python benchmarks/compare_tools.py "
-            "--target pearl_earring.jpg --grid 40` first."
-        )
-    payload = json.loads(metrics_path.read_text())
+        return [], "?"
+    try:
+        payload = json.loads(metrics_path.read_text())
+    except (OSError, ValueError):
+        return [], "?"
     bars: list[tuple[str, float, tuple[int, int, int]]] = []
     for entry in payload.get("results", []):
         tool_id = entry.get("tool_id", "")
@@ -451,6 +445,22 @@ def make_diversity_chart(out_path: Path) -> None:
         label = _DIVERSITY_BAR_LABELS.get(tool_id, tool_id)
         color = _DIVERSITY_BAR_COLORS.get(tool_id, (160, 160, 160))
         bars.append((label, diversity, color))
+    return bars, str(payload.get("target", "?"))
+
+
+def make_diversity_chart(out_path: Path) -> bool:
+    """Cell-diversity bar chart, rendered from the live benchmark JSON.
+
+    Returns ``True`` if the chart was rendered, ``False`` if the metrics
+    file is missing (in which case the caller should log a warning and
+    continue with the rest of the figure pipeline). The previous version
+    raised ``SystemExit`` from inside the figure pipeline, which killed
+    every other figure if the bench had not been run.
+    """
+    metrics_path = REPO_ROOT / "docs" / "assets" / "bench_outputs" / "metrics.json"
+    bars, target_label = _load_diversity_bars(metrics_path)
+    if not bars:
+        return False
 
     width = 1180
     height = 480
@@ -464,19 +474,17 @@ def make_diversity_chart(out_path: Path) -> None:
 
     cv2.putText(
         canvas,
-        f"Cell diversity on {payload.get('target', '?')} (higher is better)",
+        f"Cell diversity on {target_label} (higher is better)",
         (32, 40),
         cv2.FONT_HERSHEY_DUPLEX, 0.7, (240, 240, 240), 1, cv2.LINE_AA,
     )
 
-    if not bars:
-        cv2.imwrite(str(out_path), canvas, [cv2.IMWRITE_JPEG_QUALITY, 92])
-        return
-
-    # Auto-scale the x axis to a sensible round number above the max bar.
+    # Auto-scale the x axis to the next 0.1 above the largest bar, with
+    # at least 15% headroom so the value label never collides with the
+    # right edge. Clamped to [0.10, 1.0].
     max_val = max(v for _, v, _ in bars)
-    x_max = max(0.10, np.ceil(max_val * 12) / 10)  # nearest 0.083 above max
-    x_max = min(1.0, max(x_max, max_val * 1.15))
+    x_max = (np.ceil(max_val * 10 + 1) / 10).item()
+    x_max = float(min(1.0, max(0.10, x_max, max_val * 1.15)))
 
     n = len(bars)
     bar_h = max(20, bar_area_h // n - 16)
@@ -512,6 +520,7 @@ def make_diversity_chart(out_path: Path) -> None:
         cv2.FONT_HERSHEY_DUPLEX, 0.45, (160, 160, 160), 1, cv2.LINE_AA,
     )
     cv2.imwrite(str(out_path), canvas, [cv2.IMWRITE_JPEG_QUALITY, 92])
+    return True
 
 
 def make_paintings_gallery(
@@ -732,7 +741,13 @@ def main() -> int:
             multi_targets, multi_mosaics,
             args.output_dir / "comparison_four_targets.jpg",
         )
-    make_diversity_chart(args.output_dir / "diversity_chart.jpg")
+    if not make_diversity_chart(args.output_dir / "diversity_chart.jpg"):
+        print(
+            "  WARNING: docs/assets/bench_outputs/metrics.json not found; "
+            "diversity_chart.jpg skipped. "
+            "Run `python benchmarks/compare_tools.py --target pearl_earring.jpg "
+            "--grid 40` to generate it."
+        )
     print(f"     figures ready in {time.perf_counter() - t0:.1f}s")
 
     if not args.keep_work:

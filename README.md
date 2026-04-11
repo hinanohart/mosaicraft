@@ -1,14 +1,16 @@
 # mosaicraft
 
+> **Upgrading from v0.3.0?** `recolor_region()`, `build_oklch_region_mask()`, and the `mosaicraft recolor-region` CLI subcommand were withdrawn in **v0.3.1**. The colour-range mask approach could not produce the quality the README implied without per-image hand-tuning. Pin `mosaicraft==0.3.0` if you depend on it, or see the [CHANGELOG](https://github.com/hinanohart/mosaicraft/blob/main/CHANGELOG.md#031---2026-04-11) for the full reasoning.
+
 **A Python photomosaic generator built on the Oklab perceptual color space, MKL optimal transport, Laplacian pyramid blending, and Oklch recoloring.**
 
 [![PyPI version](https://img.shields.io/pypi/v/mosaicraft.svg)](https://pypi.org/project/mosaicraft/)
 [![Python](https://img.shields.io/pypi/pyversions/mosaicraft.svg)](https://pypi.org/project/mosaicraft/)
 [![CI](https://github.com/hinanohart/mosaicraft/actions/workflows/ci.yml/badge.svg)](https://github.com/hinanohart/mosaicraft/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/hinanohart/mosaicraft/blob/main/LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-![Target vs mosaicraft output](docs/images/hero.jpg)
+![Target vs mosaicraft output](https://raw.githubusercontent.com/hinanohart/mosaicraft/main/docs/images/hero.jpg)
 
 ---
 
@@ -61,7 +63,7 @@ mosaicraft presets
 mosaicraft recolor-presets
 ```
 
-![Before and after](docs/images/before_after.jpg)
+![Before and after](https://raw.githubusercontent.com/hinanohart/mosaicraft/main/docs/images/before_after.jpg)
 
 *Target: Vermeer, Girl with a Pearl Earring (1,366 × 1,600 px). 1,024-image CC0 tile pool × 4 augmentations = 4,096 candidates. 52 × 61 = 3,172 cells. Preset `vivid`.*
 
@@ -129,13 +131,13 @@ recolor("mosaic.jpg", "mosaic_sepia.jpg", preset="sepia")
 
 **Why MKL optimal transport?** Reinhard color transfer matches the first and second moments of the LAB distribution. MKL ([Pitié et al., 2007](https://www.researchgate.net/publication/220056262)) matches the full covariance, so the *shape* of the tile's color distribution is preserved as its statistics slide toward the target cell. Details survive; averages don't win.
 
-![Zoom detail](docs/images/zoom_detail.jpg)
+![Zoom detail](https://raw.githubusercontent.com/hinanohart/mosaicraft/main/docs/images/zoom_detail.jpg)
 
 *Left: the center of the mosaic — at reading distance, the painting is recognizable. Right: a 2× nearest-neighbor zoom — every cell is a distinct CC0 photograph.*
 
 ## Oklch tile-pool expansion
 
-![Tile pool sample](docs/images/tiles_sample.jpg)
+![Tile pool sample](https://raw.githubusercontent.com/hinanohart/mosaicraft/main/docs/images/tiles_sample.jpg)
 
 One of the hardest problems in photomosaic generation is having enough tiles. A 1,000-image pool gives ~1,000 mean colors, so a 5,000-cell mosaic is forced to repeat. `color_variants=N` rotates every tile through N evenly-spaced hue shifts in Oklch (the default schedule is 72° / 144° / 216° / 288°), reusing the same photograph at four new positions on the a/b plane:
 
@@ -147,7 +149,7 @@ Lightness is preserved exactly, so texture and shading are untouched — only hu
 
 ## Oklch whole-image recoloring
 
-![Recolor gallery](docs/images/recolor_gallery.jpg)
+![Recolor gallery](https://raw.githubusercontent.com/hinanohart/mosaicraft/main/docs/images/recolor_gallery.jpg)
 
 A finished mosaic can be recolored through any of 21 named presets (`blue`, `cyan`, `teal`, `purple`, `pink`, `orange`, `yellow`, `lime`, `sepia`, `cyberpunk`, ...) or an arbitrary `#RRGGBB`, and the operation preserves the Oklab L channel exactly. Because L is untouched, the per-tile shading survives the rotation — no boundary artifacts, no re-rendering, no tile reload. One 5-MB mosaic becomes a gallery of themed variants in a few hundred milliseconds each.
 
@@ -172,9 +174,9 @@ Under the hood: convert to Oklab, split into L and C·exp(iH), rotate H and scal
 | `tile`    | Emphasizes individual tiles. Strongest mosaic look.        |
 | `fast`    | FAISS + error diffusion only. No rerank, no Hungarian.     |
 
-Pass a dict to `MosaicGenerator(preset={...})` to override individual keys. See [`src/mosaicraft/presets.py`](src/mosaicraft/presets.py) for the full schema.
+Pass a dict to `MosaicGenerator(preset={...})` to override individual keys. See [`src/mosaicraft/presets.py`](https://github.com/hinanohart/mosaicraft/blob/main/src/mosaicraft/presets.py) for the full schema.
 
-![Preset comparison](docs/images/presets_comparison.jpg)
+![Preset comparison](https://raw.githubusercontent.com/hinanohart/mosaicraft/main/docs/images/presets_comparison.jpg)
 
 ## Benchmarks
 
@@ -215,11 +217,11 @@ Output: ~14,000 × 14,000 px ≈ 200 megapixels. The dominant memory cost is the
 
 ## Compared against other photomosaic OSS
 
-![Cell diversity vs other tools](docs/images/diversity_chart.jpg)
+![Cell diversity vs other tools](https://raw.githubusercontent.com/hinanohart/mosaicraft/main/docs/images/diversity_chart.jpg)
 
 Cell diversity is what separates a photomosaic from a four-colour halftone — at 8% the grid is essentially the same dozen tiles repeated all over, at 40%+ each cell is its own photo. The chart above shows the metric on Vermeer's *Girl with a Pearl Earring* against a shared 1,024-image CC0 pool, regenerated by `benchmarks/compare_tools.py` and saved to `docs/assets/bench_outputs/metrics.json`.
 
-![4-painting comparison](docs/images/comparison_four_targets.jpg)
+![4-painting comparison](https://raw.githubusercontent.com/hinanohart/mosaicraft/main/docs/images/comparison_four_targets.jpg)
 
 The same `vivid` preset against four very different source styles — Vermeer, Van Gogh, Hokusai's *Great Wave* and *Red Fuji* — using one shared 1,024-image CC0 tile pool. No tile pool was tuned per painting.
 
@@ -298,9 +300,9 @@ python scripts/generate_readme_figures.py --target starry_night   # swap target
 python benchmarks/compare_tools.py --target pearl_earring --grid 40
 ```
 
-SHA256 and license metadata for every bootstrapped file live in [`docs/assets/MANIFEST.json`](docs/assets/MANIFEST.json). The raw image files are not committed; the manifest is.
+SHA256 and license metadata for every bootstrapped file live in [`docs/assets/MANIFEST.json`](https://github.com/hinanohart/mosaicraft/blob/main/docs/assets/MANIFEST.json). The raw image files are not committed; the manifest is.
 
-![Public-domain paintings gallery](docs/images/paintings_gallery.jpg)
+![Public-domain paintings gallery](https://raw.githubusercontent.com/hinanohart/mosaicraft/main/docs/images/paintings_gallery.jpg)
 
 *All four public-domain targets the scripts can feature — swap with `--target {pearl_earring,starry_night,great_wave,red_fuji}`.*
 
@@ -315,11 +317,11 @@ bandit -r src -ll             # security scan
 
 ## Contributing
 
-Bug reports, feature requests, and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow. Security issues: see [SECURITY.md](SECURITY.md).
+Bug reports, feature requests, and pull requests are welcome. See [CONTRIBUTING.md](https://github.com/hinanohart/mosaicraft/blob/main/CONTRIBUTING.md) for the development workflow. Security issues: see [SECURITY.md](https://github.com/hinanohart/mosaicraft/blob/main/SECURITY.md).
 
 ## License and image credits
 
-MIT License. See [LICENSE](LICENSE).
+MIT License. See [LICENSE](https://github.com/hinanohart/mosaicraft/blob/main/LICENSE).
 
 Every figure in this README is reproducible from public-domain / CC0 sources:
 

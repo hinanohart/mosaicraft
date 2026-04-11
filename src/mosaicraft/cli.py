@@ -304,6 +304,17 @@ def _cmd_recolor(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
+    # Catch users still typing the v0.3.0-only `recolor-region` subcommand
+    # before argparse rejects it with a generic "invalid choice" message.
+    raw_argv = list(argv) if argv is not None else sys.argv[1:]
+    if "recolor-region" in raw_argv:
+        sys.stderr.write(
+            "mosaicraft: 'recolor-region' was withdrawn in v0.3.1. "
+            "It briefly shipped in v0.3.0 but did not produce the quality "
+            "the README implied without per-image hand tuning. "
+            "Pin `pip install 'mosaicraft==0.3.0'` if you depend on it.\n"
+        )
+        return 2
     args = parser.parse_args(argv)
     configure_logging(verbose=getattr(args, "verbose", False))
     try:

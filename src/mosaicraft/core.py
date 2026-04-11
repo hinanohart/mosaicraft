@@ -327,6 +327,21 @@ class MosaicGenerator:
         n_tiles = len(tileset)
         cost_matrix_mb = (n_cells * n_tiles * 8) / (1024**2)
         wants_hungarian = self.profile["placement"] == "hungarian"
+
+        # Hungarian assignment requires n_tiles >= n_cells (the assignment
+        # is 1:1 — every cell needs a distinct tile). scipy's
+        # `linear_sum_assignment` raises a generic
+        # ValueError("cost matrix is infeasible") that gives the user no
+        # actionable hint, so we raise a richer error up-front.
+        if wants_hungarian and n_tiles < n_cells:
+            raise ValueError(
+                f"tile pool too small for Hungarian placement: "
+                f"{n_tiles} tiles but mosaic needs {n_cells} cells. "
+                f"Reduce --target-tiles to {n_tiles} or below, "
+                f"add more tiles to the pool, "
+                f"or use --preset fast (FAISS placement) which allows tile reuse."
+            )
+
         use_hungarian = wants_hungarian and cost_matrix_mb < self.hungarian_mem_limit_mb
 
         if wants_hungarian and not use_hungarian:
