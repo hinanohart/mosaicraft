@@ -92,5 +92,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * 47 unit and end-to-end tests using synthetically generated fixtures.
 * MIT license, contributor docs, security policy, and code of conduct.
 
-[Unreleased]: https://github.com/hinanohart/mosaicraft/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/hinanohart/mosaicraft/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/hinanohart/mosaicraft/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/hinanohart/mosaicraft/releases/tag/v0.1.0
