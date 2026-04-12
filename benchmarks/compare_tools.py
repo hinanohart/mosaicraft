@@ -577,7 +577,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--target",
         default="pearl_earring.jpg",
-        choices=["pearl_earring.jpg", "zundamon.jpg"],
+        choices=["pearl_earring.jpg"],
         help="painting to use as the comparison target",
     )
     p.add_argument("--grid", type=int, default=40, help="grid side length (cells)")

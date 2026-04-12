@@ -56,7 +56,6 @@ MANIFEST_PATH = ASSETS_DIR / "MANIFEST.json"
 # ``scripts/download_demo_assets.py``'s ``PAINTINGS`` list.
 TARGET_CHOICES = {
     "pearl_earring": "pearl_earring.jpg",
-    "zundamon": "zundamon.jpg",
 }
 
 

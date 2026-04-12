@@ -1,6 +1,6 @@
 """Download public-domain demo assets for mosaicraft README figures.
 
-Fetches four iconic public-domain paintings from Wikimedia Commons and a
+Fetches a public-domain painting from Wikimedia Commons and a
 pool of ~1024 CC0 photographs from picsum.photos (Unsplash-powered), then
 writes ``docs/assets/MANIFEST.json`` with per-file SHA256 and license
 metadata so the download is bit-exact reproducible.
@@ -47,13 +47,10 @@ MAX_TILE_WORKERS = 8
 
 # --- public-domain paintings from Wikimedia Commons ------------------------
 #
-# All four are pre-1929 originals whose copyright has long expired.
-# Wikimedia URLs resolved via commons.wikimedia.org/w/api.php on 2026-04-09;
+# Pre-1929 original whose copyright has long expired.
+# Wikimedia URL resolved via commons.wikimedia.org/w/api.php on 2026-04-09;
 # SHA256 is recomputed at download time and pinned in MANIFEST.json.
-#
-# We fetch 2048px thumbnails instead of originals because the Van Gogh
-# "Google Art Project" master is ~700 MB. 2048px is plenty for README hero
-# images and keeps the total demo payload under ~10 MB.
+# We fetch 2048px thumbnails instead of originals to keep the payload small.
 
 PAINTINGS: list[dict[str, Any]] = [
     {

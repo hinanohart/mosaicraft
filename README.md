@@ -260,10 +260,9 @@ python scripts/download_demo_assets.py --verify-only   # SHA256 integrity check
 # 2. Render figures.
 python scripts/generate_readme_figures.py
 python scripts/generate_readme_figures.py --quick                 # faster iteration
-python scripts/generate_readme_figures.py --target zundamon       # swap target
 
 # 3. Run the OSS comparison benchmark.
-python benchmarks/compare_tools.py --target pearl_earring --grid 40
+python benchmarks/compare_tools.py --target pearl_earring.jpg --grid 40
 ```
 
 SHA256 and license metadata for every bootstrapped file live in [`docs/assets/MANIFEST.json`](https://github.com/hinanohart/mosaicraft/blob/main/docs/assets/MANIFEST.json). The raw image files are not committed; the manifest is.
