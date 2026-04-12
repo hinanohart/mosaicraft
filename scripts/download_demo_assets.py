@@ -1,22 +1,27 @@
-"""Download public-domain demo assets for mosaicraft README figures.
+"""Download demo assets for mosaicraft README figures.
 
 Fetches a public-domain painting from Wikimedia Commons and a
 pool of ~1024 CC0 photographs from picsum.photos (Unsplash-powered), then
 writes ``docs/assets/MANIFEST.json`` with per-file SHA256 and license
 metadata so the download is bit-exact reproducible.
 
-The actual image files are *not* committed (they live under
-``docs/assets/`` which is gitignored). Only MANIFEST.json is versioned so a
-fresh clone can run::
+Zundamon (the second demo target) ships committed in the repository under
+``docs/assets/paintings/zundamon.jpg`` and is not downloaded — it is
+included in the manifest for integrity verification only.
+
+The downloaded image files are *not* committed (they live under
+``docs/assets/`` which is gitignored); only ``zundamon.jpg`` and
+``MANIFEST.json`` are versioned. A fresh clone can run::
 
     python scripts/download_demo_assets.py            # download + verify
     python scripts/download_demo_assets.py --verify-only  # integrity check
     python scripts/download_demo_assets.py --force    # force re-download
     python scripts/download_demo_assets.py --offline  # fail if any asset missing
 
-All paintings are public domain (pre-1929 or author died >70 years ago).
-All Picsum tiles are CC0 via the Unsplash license (free for any use,
-attribution appreciated but not required).
+Wikimedia paintings are public domain (pre-1929 or author died >70 years
+ago). Zundamon is used under the Tohoku Zunko Guidelines. All Picsum tiles
+are CC0 via the Unsplash license (free for any use, attribution appreciated
+but not required).
 """
 
 from __future__ import annotations
@@ -65,6 +70,24 @@ PAINTINGS: list[dict[str, Any]] = [
             "d/d7/Meisje_met_de_parel.jpg/"
             "2048px-Meisje_met_de_parel.jpg"
         ),
+    },
+]
+
+# --- committed targets (not downloaded, already in git) ---------------------
+#
+# Zundamon is a character by SSS LLC / Tohoku Zunko Project.  The image is
+# committed under docs/assets/paintings/ and covered by the Tohoku Zunko
+# Guidelines (https://zunko.jp/guideline.html).  It is NOT auto-downloaded;
+# this list exists so the manifest includes its SHA256 for verify-only runs.
+
+COMMITTED_TARGETS: list[dict[str, Any]] = [
+    {
+        "name": "zundamon.jpg",
+        "title": "Zundamon (illustration)",
+        "artist": "SSS LLC / Tohoku Zunko Project",
+        "year": "2024",
+        "license": "Tohoku Zunko Guidelines (https://zunko.jp/guideline.html)",
+        "source_page": "https://zunko.jp/guideline.html",
     },
 ]
 
@@ -144,6 +167,31 @@ def download_paintings(*, force: bool, offline: bool) -> list[dict[str, Any]]:
                 "license": p["license"],
                 "source_url": p["url"],
                 "source_page": p["source_page"],
+            }
+        )
+
+    # Committed targets (already in git, not downloaded).
+    for ct in COMMITTED_TARGETS:
+        dest = PAINTINGS_DIR / ct["name"]
+        if not dest.exists():
+            if offline:
+                raise SystemExit(f"--offline set but committed target {dest} is missing")
+            raise SystemExit(
+                f"committed target {dest} not found — it should ship with the repository. "
+                "Re-clone or run `git checkout -- docs/assets/paintings/zundamon.jpg`."
+            )
+        print(f"  committed target: {ct['name']} ({dest.stat().st_size / 1024:.1f} KB)")
+        entries.append(
+            {
+                "path": f"paintings/{ct['name']}",
+                "sha256": sha256_of(dest),
+                "size_bytes": dest.stat().st_size,
+                "title": ct["title"],
+                "artist": ct["artist"],
+                "year": ct["year"],
+                "license": ct["license"],
+                "source_page": ct["source_page"],
+                "committed": True,
             }
         )
     return entries
@@ -268,7 +316,7 @@ def main() -> int:
         return 1 if verify_against(existing) else 0
 
     ASSETS_DIR.mkdir(parents=True, exist_ok=True)
-    print("downloading public-domain paintings from Wikimedia Commons ...")
+    print("processing target paintings ...")
     paintings = download_paintings(force=args.force, offline=args.offline)
     print("downloading CC0 tile pool from picsum.photos ...")
     tiles = download_tiles(force=args.force, offline=args.offline)

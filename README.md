@@ -265,7 +265,7 @@ python scripts/generate_readme_figures.py --quick                 # faster itera
 python benchmarks/compare_tools.py --target pearl_earring.jpg --grid 40
 ```
 
-SHA256 and license metadata for every bootstrapped file live in [`docs/assets/MANIFEST.json`](https://github.com/hinanohart/mosaicraft/blob/main/docs/assets/MANIFEST.json). The raw image files are not committed; the manifest is.
+SHA256 and license metadata for every bootstrapped file live in [`docs/assets/MANIFEST.json`](https://github.com/hinanohart/mosaicraft/blob/main/docs/assets/MANIFEST.json). Downloaded images (paintings from Wikimedia, tiles from picsum) are not committed; only the manifest and the Zundamon target (79 KB, committed under the [Tohoku Zunko Guidelines](https://zunko.jp/guideline.html)) ship with the repository.
 
 ## Testing
 

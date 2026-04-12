@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Generate README figures for mosaicraft.
 
-Loads public-domain paintings from Wikimedia Commons and a CC0 tile pool
-from picsum.photos (both bootstrapped by
-``scripts/download_demo_assets.py``), then renders mosaics with several
-presets and composites the README comparison figures into
-``docs/images/``.
+Loads demo target images (public-domain paintings from Wikimedia Commons
+and licensed character art) plus a CC0 tile pool from picsum.photos
+(bootstrapped by ``scripts/download_demo_assets.py``), then renders
+mosaics with several presets and composites the README comparison figures
+into ``docs/images/``.
 
 Every source image is freely redistributable:
 
 * Paintings — public domain (pre-1929, Wikimedia Commons)
-* Tiles    — CC0 / Unsplash License via picsum.photos
+* Zundamon  — Tohoku Zunko Guidelines (committed in repo)
+* Tiles     — CC0 / Unsplash License via picsum.photos
 
 Usage::
 
@@ -19,7 +20,7 @@ Usage::
 
     # then render figures
     python scripts/generate_readme_figures.py
-    python scripts/generate_readme_figures.py --target pearl_earring
+    python scripts/generate_readme_figures.py --target pearl_earring  # or --target zundamon
     python scripts/generate_readme_figures.py --quick  # fewer cells, faster iteration
 """
 
@@ -53,9 +54,10 @@ MANIFEST_PATH = ASSETS_DIR / "MANIFEST.json"
 
 # Hero caption text is pulled from MANIFEST.json so it stays in sync with the
 # licensing metadata. Keys here must match the ``name`` field in
-# ``scripts/download_demo_assets.py``'s ``PAINTINGS`` list.
+# ``scripts/download_demo_assets.py``'s ``PAINTINGS`` or ``COMMITTED_TARGETS`` list.
 TARGET_CHOICES = {
     "pearl_earring": "pearl_earring.jpg",
+    "zundamon": "zundamon.jpg",
 }
 
 
@@ -69,9 +71,11 @@ def load_manifest() -> dict:
 
 
 def painting_caption(manifest: dict, filename: str) -> str:
-    """Return a short attribution string like 'Vermeer - Girl with a Pearl Earring (PD)'."""
+    """Return a short attribution string for a target image."""
     for entry in manifest.get("paintings", []):
         if entry["path"].endswith(filename):
+            if entry.get("committed"):
+                return entry["title"]
             artist_last = entry["artist"].split()[-1]
             return f"{artist_last} - {entry['title']} (PD)"
     return filename
@@ -470,7 +474,7 @@ def parse_args() -> argparse.Namespace:
         "--target",
         choices=sorted(TARGET_CHOICES.keys()),
         default="pearl_earring",
-        help="Which public-domain painting to feature as the hero target",
+        help="Which target image to feature as the hero",
     )
     parser.add_argument("--output-dir", type=Path, default=REPO_ROOT / "docs" / "images")
     parser.add_argument(
