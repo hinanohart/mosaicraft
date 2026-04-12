@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* README demo targets reduced from four public-domain paintings to
+  Vermeer's *Girl with a Pearl Earring* + a Zundamon illustration,
+  showing the pipeline works on both fine art and modern illustrations.
+
 ### Removed
 
 * **Oklch whole-image recoloring** (`mosaicraft.recolor` module, `recolor()`
@@ -15,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The feature was an optional post-processing step unrelated to the core
   mosaic pipeline and added maintenance weight without clear user demand.
   Pin `mosaicraft<=0.3.2` if you depend on it.
+* Starry Night, Great Wave, and Red Fuji demo targets removed from
+  `scripts/download_demo_assets.py` and README figures.
 
 ## [0.3.2] - 2026-04-11
 

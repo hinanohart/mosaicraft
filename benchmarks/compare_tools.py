@@ -40,7 +40,7 @@ Tools under test (all invoked from a clean subprocess / fresh Python context):
 Run from the repository root after ``scripts/download_demo_assets.py``::
 
     python benchmarks/compare_tools.py
-    python benchmarks/compare_tools.py --target red_fuji.jpg --grid 40
+    python benchmarks/compare_tools.py --target pearl_earring.jpg --grid 40
     python benchmarks/compare_tools.py --skip codebox  # if not cloned
 
 Outputs:
@@ -576,8 +576,8 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
         "--target",
-        default="red_fuji.jpg",
-        choices=["starry_night.jpg", "great_wave.jpg", "red_fuji.jpg", "pearl_earring.jpg"],
+        default="pearl_earring.jpg",
+        choices=["pearl_earring.jpg", "zundamon.jpg"],
         help="painting to use as the comparison target",
     )
     p.add_argument("--grid", type=int, default=40, help="grid side length (cells)")

@@ -56,9 +56,7 @@ MANIFEST_PATH = ASSETS_DIR / "MANIFEST.json"
 # ``scripts/download_demo_assets.py``'s ``PAINTINGS`` list.
 TARGET_CHOICES = {
     "pearl_earring": "pearl_earring.jpg",
-    "starry_night": "starry_night.jpg",
-    "great_wave": "great_wave.jpg",
-    "red_fuji": "red_fuji.jpg",
+    "zundamon": "zundamon.jpg",
 }
 
 
@@ -299,20 +297,15 @@ def make_tiles_sample(
     cv2.imwrite(str(out_path), fig, [cv2.IMWRITE_JPEG_QUALITY, 88])
 
 
-def make_four_target_comparison(
+def make_target_comparison(
     targets: dict[str, np.ndarray],
     mosaics: dict[str, np.ndarray],
     out_path: Path,
 ) -> None:
-    """4-painting before/after grid — the visual headline of the comparison.
-
-    Each row pairs the original painting with its mosaic so a reader can scan
-    four very different source styles (Vermeer, Van Gogh, Hokusai) side-by-side
-    without scrolling.
-    """
+    """Before/after grid for each target image."""
     panels: list[np.ndarray] = []
     labels: list[str] = []
-    for key in ("pearl_earring", "starry_night", "great_wave", "red_fuji"):
+    for key in TARGET_CHOICES:
         if key not in targets or key not in mosaics:
             continue
         panels.append(targets[key])
@@ -468,78 +461,6 @@ def make_diversity_chart(out_path: Path) -> bool:
     return True
 
 
-def make_paintings_gallery(
-    manifest: dict,
-    out_path: Path,
-    *,
-    target_h: int = 360,
-    multi_targets: dict[str, np.ndarray] | None = None,
-    multi_mosaics: dict[str, np.ndarray] | None = None,
-) -> None:
-    """Original-vs-mosaic gallery for every public-domain painting.
-
-    Earlier this function only showed the original paintings, which left
-    readers with no idea what mosaicraft *did* to them. The new layout is
-    a 4-row x 2-column grid: each row pairs the original painting with
-    its `vivid` mosaic, so the gallery doubles as a small "before / after"
-    spread for each artist.
-    """
-    entries = manifest.get("paintings", [])
-    if not entries:
-        return
-    multi_targets = multi_targets or {}
-    multi_mosaics = multi_mosaics or {}
-
-    rows: list[np.ndarray] = []
-    bar_h = 38
-    gap = 10
-    for entry in entries:
-        src_path = entry["path"]
-        # MANIFEST stores paths relative to docs/assets/.
-        for key, fname in TARGET_CHOICES.items():
-            if src_path.endswith(fname):
-                target_key = key
-                break
-        else:
-            continue
-        original = multi_targets.get(target_key)
-        mosaic = multi_mosaics.get(target_key)
-        if original is None:
-            original = cv2.imread(str(ASSETS_DIR / src_path))
-        if original is None or mosaic is None:
-            continue
-
-        artist_last = entry["artist"].split()[-1]
-        title = entry["title"]
-        left = _fit_height(original, target_h)
-        right = _fit_height(mosaic, target_h)
-        widths = [left.shape[1], right.shape[1]]
-        row_w = sum(widths) + gap * 3
-        row = np.full((bar_h + target_h + gap, row_w, 3), 22, dtype=np.uint8)
-        x = gap
-        for im, lab in (
-            (left, f"{artist_last} - {title} (original)"),
-            (right, f"{artist_last} - {title} (mosaicraft vivid)"),
-        ):
-            w = im.shape[1]
-            row[0:bar_h, x : x + w] = _label_bar(w, lab, height=bar_h, font_scale=0.65)
-            row[bar_h : bar_h + target_h, x : x + w] = im
-            x += w + gap
-        rows.append(row)
-
-    if not rows:
-        return
-    max_w = max(r.shape[1] for r in rows)
-    padded = []
-    for r in rows:
-        if r.shape[1] < max_w:
-            pad = np.full((r.shape[0], max_w - r.shape[1], 3), 22, dtype=np.uint8)
-            r = np.hstack([r, pad])
-        padded.append(r)
-    fig = np.vstack(padded)
-    cv2.imwrite(str(out_path), fig, [cv2.IMWRITE_JPEG_QUALITY, _JPEG_Q])
-
-
 # --------------------------------------------------------------------------- #
 # Driver.
 # --------------------------------------------------------------------------- #
@@ -572,7 +493,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-grid",
         action="store_true",
-        help="Skip the 4-painting comparison grid (faster iteration)",
+        help="Skip the target comparison grid (faster iteration)",
     )
     return parser.parse_args()
 
@@ -635,7 +556,7 @@ def main() -> int:
             f" ({result.grid_cols}x{result.grid_rows} = {result.n_tiles} cells)"
         )
 
-    # 3b. Optional 4-painting mosaic batch (for the headline grid).
+    # 3b. Optional target comparison batch.
     multi_mosaics: dict[str, np.ndarray] = {args.target: mosaics["vivid"]}
     multi_targets: dict[str, np.ndarray] = {args.target: target}
     if not args.skip_grid:
@@ -674,16 +595,10 @@ def main() -> int:
     make_presets_comparison(mosaics, args.output_dir / "presets_comparison.jpg")
     make_zoom_detail(mosaics["vivid"], args.output_dir / "zoom_detail.jpg")
     make_tiles_sample(TILES_DIR, args.output_dir / "tiles_sample.jpg")
-    make_paintings_gallery(
-        manifest,
-        args.output_dir / "paintings_gallery.jpg",
-        multi_targets=multi_targets,
-        multi_mosaics=multi_mosaics,
-    )
     if not args.skip_grid and len(multi_mosaics) >= 2:
-        make_four_target_comparison(
+        make_target_comparison(
             multi_targets, multi_mosaics,
-            args.output_dir / "comparison_four_targets.jpg",
+            args.output_dir / "target_comparison.jpg",
         )
     if not make_diversity_chart(args.output_dir / "diversity_chart.jpg"):
         print(

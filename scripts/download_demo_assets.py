@@ -57,45 +57,6 @@ MAX_TILE_WORKERS = 8
 
 PAINTINGS: list[dict[str, Any]] = [
     {
-        "name": "starry_night.jpg",
-        "title": "The Starry Night",
-        "artist": "Vincent van Gogh",
-        "year": "1889",
-        "license": "Public Domain (author died 1890, pre-1929 work)",
-        "source_page": "https://commons.wikimedia.org/wiki/File:Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg",
-        "url": (
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/"
-            "e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/"
-            "2048px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg"
-        ),
-    },
-    {
-        "name": "great_wave.jpg",
-        "title": "The Great Wave off Kanagawa",
-        "artist": "Katsushika Hokusai",
-        "year": "c. 1831",
-        "license": "Public Domain (pre-1929 work)",
-        "source_page": "https://commons.wikimedia.org/wiki/File:Tsunami_by_hokusai_19th_century.jpg",
-        "url": (
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/"
-            "a/a5/Tsunami_by_hokusai_19th_century.jpg/"
-            "2048px-Tsunami_by_hokusai_19th_century.jpg"
-        ),
-    },
-    {
-        "name": "red_fuji.jpg",
-        "title": "Fine Wind, Clear Morning (Red Fuji)",
-        "artist": "Katsushika Hokusai",
-        "year": "c. 1831",
-        "license": "Public Domain (pre-1929 work)",
-        "source_page": "https://commons.wikimedia.org/wiki/File:Red_Fuji_southern_wind_clear_morning.jpg",
-        "url": (
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/"
-            "5/57/Red_Fuji_southern_wind_clear_morning.jpg/"
-            "2048px-Red_Fuji_southern_wind_clear_morning.jpg"
-        ),
-    },
-    {
         "name": "pearl_earring.jpg",
         "title": "Girl with a Pearl Earring",
         "artist": "Johannes Vermeer",
