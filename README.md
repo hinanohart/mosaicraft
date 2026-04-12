@@ -1,8 +1,6 @@
 # mosaicraft
 
-> **Upgrading from v0.3.0?** `recolor_region()`, `build_oklch_region_mask()`, and the `mosaicraft recolor-region` CLI subcommand were withdrawn in **v0.3.1**. The colour-range mask approach could not produce the quality the README implied without per-image hand-tuning. Pin `mosaicraft==0.3.0` if you depend on it, or see the [CHANGELOG](https://github.com/hinanohart/mosaicraft/blob/main/CHANGELOG.md#031---2026-04-11) for the full reasoning.
-
-**A Python photomosaic generator built on the Oklab perceptual color space, MKL optimal transport, Laplacian pyramid blending, and Oklch recoloring.**
+**A Python photomosaic generator built on the Oklab perceptual color space, MKL optimal transport, Laplacian pyramid blending, and Oklch tile-pool expansion.**
 
 [![PyPI version](https://img.shields.io/pypi/v/mosaicraft.svg)](https://pypi.org/project/mosaicraft/)
 [![Python](https://img.shields.io/pypi/pyversions/mosaicraft.svg)](https://pypi.org/project/mosaicraft/)
@@ -23,7 +21,6 @@ What's inside:
 - **Hungarian 1:1 placement** — globally optimal assignment of tiles to cells via the Jonker–Volgenant algorithm. Falls back to FAISS + Floyd–Steinberg error diffusion when the cost matrix exceeds memory.
 - **Laplacian pyramid blending** — removes grid lines without blurring detail.
 - **Oklch tile-pool expansion** — generates N hue-rotated variants of every tile in the pool, multiplying the effective catalog size by (N+1) with zero extra photographs.
-- **Oklch whole-image recoloring** — rotates the finished mosaic through 21 named presets (or any `#RRGGBB`) while preserving every tile's lightness exactly, so the result has no boundary artifacts.
 
 The hero image above is reproducible from this repository. `python scripts/download_demo_assets.py` fetches ~8 MB of public-domain paintings and CC0 tiles; `python scripts/generate_readme_figures.py` then writes every image in this README.
 
@@ -53,14 +50,8 @@ mosaicraft generate photo.jpg -t ./tiles -o big.jpg --color-variants 4
 # Pre-build a feature cache so subsequent runs load in under a second.
 mosaicraft cache --tiles ./tiles --cache-dir ./cache --sizes 56 88 120
 
-# Recolor a finished mosaic in Oklab (no regeneration).
-mosaicraft recolor mosaic.jpg -o mosaic_blue.jpg  --preset blue
-mosaicraft recolor mosaic.jpg -o mosaic_sepia.jpg --preset sepia
-mosaicraft recolor mosaic.jpg -o mosaic_brand.jpg --hex "#3b82f6"
-
 # List all presets.
 mosaicraft presets
-mosaicraft recolor-presets
 ```
 
 ![Before and after](https://raw.githubusercontent.com/hinanohart/mosaicraft/main/docs/images/before_after.jpg)
@@ -70,7 +61,7 @@ mosaicraft recolor-presets
 ### Python API
 
 ```python
-from mosaicraft import MosaicGenerator, recolor
+from mosaicraft import MosaicGenerator
 
 gen = MosaicGenerator(
     tile_dir="./tiles",
@@ -78,10 +69,6 @@ gen = MosaicGenerator(
     color_variants=4,              # 1,024 tiles -> 5,120 candidates
 )
 result = gen.generate("photo.jpg", "mosaic.jpg", target_tiles=5000)
-
-# Then recolor the finished mosaic without regenerating anything.
-recolor("mosaic.jpg", "mosaic_blue.jpg", preset="blue")
-recolor("mosaic.jpg", "mosaic_sepia.jpg", preset="sepia")
 ```
 
 ## Pipeline
@@ -146,23 +133,6 @@ gen = MosaicGenerator(tile_dir="./tiles", preset="vivid", color_variants=4)
 ```
 
 Lightness is preserved exactly, so texture and shading are untouched — only hue and chroma move. For a 1,024-tile pool this turns into **5,120 candidates after Oklch expansion** (1,024 × 5 = original + 4 hue rotations), or **20,480 once the default flip + brightness augmentation is layered on top**. The Hungarian assignment then has an order of magnitude more material to work with.
-
-## Oklch whole-image recoloring
-
-![Recolor gallery](https://raw.githubusercontent.com/hinanohart/mosaicraft/main/docs/images/recolor_gallery.jpg)
-
-A finished mosaic can be recolored through any of 21 named presets (`blue`, `cyan`, `teal`, `purple`, `pink`, `orange`, `yellow`, `lime`, `sepia`, `cyberpunk`, ...) or an arbitrary `#RRGGBB`, and the operation preserves the Oklab L channel exactly. Because L is untouched, the per-tile shading survives the rotation — no boundary artifacts, no re-rendering, no tile reload. One 5-MB mosaic becomes a gallery of themed variants in a few hundred milliseconds each.
-
-```python
-from mosaicraft import recolor
-
-recolor("mosaic.jpg", "mosaic_blue.jpg",  preset="blue")
-recolor("mosaic.jpg", "mosaic_sepia.jpg", preset="sepia")
-recolor("mosaic.jpg", "mosaic_brand.jpg", target_hex="#3b82f6")
-recolor("mosaic.jpg", "mosaic_shift.jpg", hue_shift_deg=60)
-```
-
-Under the hood: convert to Oklab, split into L and C·exp(iH), rotate H and scale C, convert back. Optional highlight / shadow chroma fading keeps paper-white and deep-black areas neutral.
 
 ## Presets
 
@@ -253,7 +223,7 @@ python benchmarks/compare_tools.py --target pearl_earring.jpg --grid 40
 ## Python API
 
 ```python
-from mosaicraft import MosaicGenerator, recolor, rotate_hue_oklch
+from mosaicraft import MosaicGenerator, rotate_hue_oklch
 
 # Generator
 gen = MosaicGenerator(
@@ -264,9 +234,6 @@ gen = MosaicGenerator(
 )
 result = gen.generate("photo.jpg", "mosaic.jpg", target_tiles=2000, tile_size=88)
 
-# Recolor a finished mosaic
-recolor("mosaic.jpg", "mosaic_sepia.jpg", preset="sepia")
-
 # Rotate a single tile or patch in Oklch (preserves L exactly)
 rotated_bgr = rotate_hue_oklch(tile_bgr, hue_shift_deg=90)
 ```
@@ -276,15 +243,14 @@ rotated_bgr = rotate_hue_oklch(tile_bgr, hue_shift_deg=90)
 Helpers:
 
 - `mosaicraft.list_presets()` — mosaic preset names.
-- `mosaicraft.list_recolor_presets()` — recolor preset names.
 - `mosaicraft.build_cache(tile_dir, cache_dir, tile_sizes, thumb_size=120)` — precompute features.
 - `mosaicraft.calc_grid(target_tiles, aspect_w, aspect_h)` — pick a grid for a desired cell count.
 
-Lower-level building blocks live in `mosaicraft.color`, `mosaicraft.features`, `mosaicraft.placement`, `mosaicraft.blending`, `mosaicraft.postprocess`, `mosaicraft.saliency`, `mosaicraft.color_augment`, `mosaicraft.recolor`, `mosaicraft.tiles`, and `mosaicraft.utils`.
+Lower-level building blocks live in `mosaicraft.color`, `mosaicraft.features`, `mosaicraft.placement`, `mosaicraft.blending`, `mosaicraft.postprocess`, `mosaicraft.saliency`, `mosaicraft.color_augment`, `mosaicraft.tiles`, and `mosaicraft.utils`.
 
 ## Reproducible figures
 
-Every image in this README — hero, before/after, preset comparison, zoom detail, tile sample, paintings gallery, comparison table, recolor gallery — is produced by two self-contained scripts:
+Every image in this README — hero, before/after, preset comparison, zoom detail, tile sample, paintings gallery, and comparison table — is produced by two self-contained scripts:
 
 ```bash
 # 1. Bootstrap public-domain demo assets (~8 MB, one time).

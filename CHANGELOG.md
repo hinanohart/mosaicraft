@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+* **Oklch whole-image recoloring** (`mosaicraft.recolor` module, `recolor()`
+  function, `mosaicraft recolor` / `mosaicraft recolor-presets` CLI
+  subcommands, 21 named presets, and `examples/recolor_gallery.py`).
+  The feature was an optional post-processing step unrelated to the core
+  mosaic pipeline and added maintenance weight without clear user demand.
+  Pin `mosaicraft<=0.3.2` if you depend on it.
+
 ## [0.3.2] - 2026-04-11
 
 This is a follow-up to v0.3.1 that fixes the post-publish audit findings —

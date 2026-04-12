@@ -299,61 +299,6 @@ def make_tiles_sample(
     cv2.imwrite(str(out_path), fig, [cv2.IMWRITE_JPEG_QUALITY, 88])
 
 
-def make_recolor_gallery(
-    mosaic: np.ndarray,
-    out_path: Path,
-    *,
-    presets: tuple[str, ...] = (
-        "blue",
-        "cyan",
-        "teal",
-        "purple",
-        "pink",
-        "orange",
-        "yellow",
-        "lime",
-        "sepia",
-    ),
-    tile_h: int = 280,
-    cols: int = 3,
-) -> None:
-    """Grid of Oklch-recolored variants of the same mosaic.
-
-    The gallery is the visual argument for why mosaicraft's recolor lives in
-    Oklab rather than HSV: the lightness channel is untouched, so every
-    variant preserves the exact shading of the original photomosaic, and the
-    only thing that changes is hue / chroma. A one-line API can turn a
-    single painting-sized mosaic into a gallery of themed variants without
-    recomputing a single tile.
-    """
-    from mosaicraft.recolor import recolor as _recolor
-
-    variants: list[np.ndarray] = [mosaic]
-    labels: list[str] = ["Original"]
-    for name in presets:
-        variants.append(_recolor(mosaic, preset=name))
-        labels.append(name)
-
-    # Square crops keep the grid neat regardless of the source aspect ratio.
-    cropped = [_center_crop(v, min(v.shape[:2])) for v in variants]
-    resized = [cv2.resize(v, (tile_h, tile_h), interpolation=cv2.INTER_AREA) for v in cropped]
-
-    rows = (len(resized) + cols - 1) // cols
-    gap = 10
-    label_h = 36
-    canvas_w = cols * tile_h + (cols + 1) * gap
-    canvas_h = rows * (tile_h + label_h + gap) + gap
-    canvas = np.full((canvas_h, canvas_w, 3), 22, dtype=np.uint8)
-    for i, (im, lab) in enumerate(zip(resized, labels)):
-        r, c = divmod(i, cols)
-        x = gap + c * (tile_h + gap)
-        y = gap + r * (tile_h + label_h + gap)
-        canvas[y : y + tile_h, x : x + tile_h] = im
-        bar = _label_bar(tile_h, lab, height=label_h, font_scale=0.7)
-        canvas[y + tile_h : y + tile_h + label_h, x : x + tile_h] = bar
-    cv2.imwrite(str(out_path), canvas, [cv2.IMWRITE_JPEG_QUALITY, _JPEG_Q])
-
-
 def make_four_target_comparison(
     targets: dict[str, np.ndarray],
     mosaics: dict[str, np.ndarray],
@@ -735,7 +680,6 @@ def main() -> int:
         multi_targets=multi_targets,
         multi_mosaics=multi_mosaics,
     )
-    make_recolor_gallery(mosaics["vivid"], args.output_dir / "recolor_gallery.jpg")
     if not args.skip_grid and len(multi_mosaics) >= 2:
         make_four_target_comparison(
             multi_targets, multi_mosaics,

@@ -40,8 +40,7 @@ Design notes
   and complementary replacements without favoring any axis.
 * ``chroma_scale`` is applied *after* rotation so that low-saturation tiles
   do not get artificially boosted into oversaturated clones of each other.
-* Highlight and shadow protection are enabled by default, matching the
-  :func:`mosaicraft.recolor.recolor` public API.
+* Highlight and shadow protection are enabled by default.
 * The augmentation produces fresh ``features``, ``lab_stats``, ``grays`` and
   ``oklab_means`` arrays for each variant so the returned :class:`TileSet`
   is a drop-in replacement for the input.

@@ -6,10 +6,13 @@ Examples::
     mosaicraft generate photo.jpg --tiles tiles/ --output mosaic.jpg
 
     # Use a specific preset and target tile count.
-    mosaicraft generate photo.jpg -t tiles/ -o out.jpg --preset vivid -n 5000
+    mosaicraft generate photo.jpg -t ./tiles -o out.jpg --preset vivid -n 5000
+
+    # Expand a 1,024-tile pool into 5,120 candidates with Oklch hue rotation.
+    mosaicraft generate photo.jpg -t ./tiles -o big.jpg --color-variants 4
 
     # Pre-build the feature cache for fast iteration.
-    mosaicraft cache --tiles tiles/ --cache-dir .cache --sizes 56 88 120
+    mosaicraft cache --tiles ./tiles --cache-dir .cache --sizes 56 88 120
 
     # List available presets.
     mosaicraft presets
@@ -24,7 +27,6 @@ from pathlib import Path
 from . import __version__
 from .core import MosaicGenerator
 from .presets import get_preset, list_presets
-from .recolor import get_recolor_preset, list_recolor_presets, recolor
 from .tiles import build_cache
 from .utils import configure_logging, logger
 
@@ -37,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Perceptual photomosaic generator with Oklab color space, "
             "Hungarian 1:1 placement, MKL optimal-transport color matching, "
-            "Laplacian blending, and Oklch tile-pool expansion + recoloring."
+            "Laplacian blending, and Oklch tile-pool expansion."
         ),
     )
     parser.add_argument(
@@ -153,74 +155,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Thumbnail size to store in the cache (default: 120)",
     )
 
-    # recolor
-    r = sub.add_parser(
-        "recolor",
-        help="Recolor an image perceptually in Oklch (hue rotation + chroma)",
-    )
-    r.add_argument("input", type=Path, help="Input image path")
-    r.add_argument("-o", "--output", type=Path, required=True, help="Output image path")
-    group = r.add_mutually_exclusive_group(required=True)
-    group.add_argument(
-        "-p",
-        "--preset",
-        choices=list_recolor_presets(),
-        help="Named recolor preset (e.g. blue, sepia, cyberpunk)",
-    )
-    group.add_argument(
-        "--hex",
-        dest="target_hex",
-        help="Target color as #RRGGBB (any valid sRGB color)",
-    )
-    group.add_argument(
-        "--hue",
-        dest="hue_shift_deg",
-        type=float,
-        help="Relative hue rotation in degrees (e.g. 60, -30)",
-    )
-    r.add_argument(
-        "--chroma",
-        dest="chroma_scale",
-        type=float,
-        default=None,
-        help="Override chroma scale (0.0 = grayscale, 1.0 = keep, >1 = boost)",
-    )
-    r.add_argument(
-        "--lightness-gamma",
-        type=float,
-        default=None,
-        help="Override lightness gamma (<1 lifts shadows, >1 deepens midtones)",
-    )
-    r.add_argument(
-        "--strength",
-        type=float,
-        default=1.0,
-        help="Blend factor 0-1 (default: 1.0 = full recolor)",
-    )
-    r.add_argument(
-        "--no-protect-highlights",
-        dest="protect_highlights",
-        action="store_false",
-        help="Do not fade chroma in highlights",
-    )
-    r.add_argument(
-        "--no-protect-shadows",
-        dest="protect_shadows",
-        action="store_false",
-        help="Do not fade chroma in shadows",
-    )
-    r.add_argument(
-        "--jpeg-quality",
-        type=int,
-        default=95,
-        help="JPEG quality 1-100 (default: 95)",
-    )
-
     # presets
     sub.add_parser("presets", help="List available mosaic presets")
-
-    # recolor-presets
-    sub.add_parser("recolor-presets", help="List available recolor presets")
 
     return parser
 
@@ -276,45 +212,8 @@ def _cmd_presets(_args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_recolor_presets(_args: argparse.Namespace) -> int:
-    print("Available recolor presets:\n")
-    for name in list_recolor_presets():
-        p = get_recolor_preset(name)
-        print(f"  {name:12s} - {p.description}")
-    return 0
-
-
-def _cmd_recolor(args: argparse.Namespace) -> int:
-    recolor(
-        args.input,
-        args.output,
-        preset=args.preset,
-        target_hex=args.target_hex,
-        hue_shift_deg=args.hue_shift_deg,
-        chroma_scale=args.chroma_scale,
-        lightness_gamma=args.lightness_gamma,
-        strength=args.strength,
-        protect_highlights=args.protect_highlights,
-        protect_shadows=args.protect_shadows,
-        jpeg_quality=args.jpeg_quality,
-    )
-    logger.info("Wrote %s", args.output)
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    # Catch users still typing the v0.3.0-only `recolor-region` subcommand
-    # before argparse rejects it with a generic "invalid choice" message.
-    raw_argv = list(argv) if argv is not None else sys.argv[1:]
-    if "recolor-region" in raw_argv:
-        sys.stderr.write(
-            "mosaicraft: 'recolor-region' was withdrawn in v0.3.1. "
-            "It briefly shipped in v0.3.0 but did not produce the quality "
-            "the README implied without per-image hand tuning. "
-            "Pin `pip install 'mosaicraft==0.3.0'` if you depend on it.\n"
-        )
-        return 2
     args = parser.parse_args(argv)
     configure_logging(verbose=getattr(args, "verbose", False))
     try:
@@ -324,10 +223,6 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_cache(args)
         if args.command == "presets":
             return _cmd_presets(args)
-        if args.command == "recolor":
-            return _cmd_recolor(args)
-        if args.command == "recolor-presets":
-            return _cmd_recolor_presets(args)
         parser.error(f"Unknown command: {args.command}")
     except KeyboardInterrupt:
         logger.error("Interrupted")
