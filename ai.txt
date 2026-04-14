@@ -1,0 +1,23 @@
+# ai.txt — AI training opt-out
+# https://site.spawning.ai/spawning-ai-txt
+# Effective: 2026-04-15
+
+User-Agent: *
+Disallow: /
+
+# This repository (mosaicraft) and all its contents — source code, documentation,
+# experiments, figures, datasets, commit history, and issue/PR text —
+# are explicitly opt-out of any AI/ML training, fine-tuning, evaluation,
+# embedding generation, or automated dataset construction.
+#
+# MIT License grants permission to use, modify, and redistribute the code.
+# It does NOT grant permission to ingest this work into training corpora.
+#
+# Additional restriction: No-AI-Training
+#
+# Parties that wish to use this repository for AI training MUST:
+#   1. Contact hinanohart@proton.me for explicit written permission, AND
+#   2. Obtain a separately-negotiated license covering training use.
+#
+# Honoring this opt-out is both a legal (compilation copyright, database right)
+# and ethical obligation of the research community.

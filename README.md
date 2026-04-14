@@ -282,7 +282,9 @@ Bug reports, feature requests, and pull requests are welcome. See [CONTRIBUTING.
 
 ## License and image credits
 
-MIT License. See [LICENSE](https://github.com/hinanohart/mosaicraft/blob/main/LICENSE).
+MIT License for human use. See [LICENSE](https://github.com/hinanohart/mosaicraft/blob/main/LICENSE).
+
+**AI/ML training opt-out**: this repository is opted out of AI/ML training, fine-tuning, and embedding generation — see [ai.txt](./ai.txt). Training use requires separately negotiated written permission.
 
 Image credits:
 
