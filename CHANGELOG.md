@@ -248,7 +248,7 @@ all of these are blockers a v0.3.1 user would have hit immediately.
 * Persistent on-disk feature cache (`build_cache` / `load_tiles_cached`).
 * CLI with `generate`, `cache`, and `presets` subcommands.
 * 47 unit and end-to-end tests using synthetically generated fixtures.
-* MIT license, contributor docs, security policy, and code of conduct.
+* Apache License 2.0, contributor docs, security policy, and code of conduct.
 
 [Unreleased]: https://github.com/hinanohart/mosaicraft/compare/v0.3.2...HEAD
 [0.3.2]: https://github.com/hinanohart/mosaicraft/compare/v0.3.1...v0.3.2

@@ -85,4 +85,4 @@ vulnerabilities.
 ## License
 
 By contributing, you agree that your contributions will be licensed under
-the MIT License (see [LICENSE](LICENSE)).
+the Apache License 2.0 (see [LICENSE](LICENSE)).

@@ -10,7 +10,7 @@ Disallow: /
 # are explicitly opt-out of any AI/ML training, fine-tuning, evaluation,
 # embedding generation, or automated dataset construction.
 #
-# MIT License grants permission to use, modify, and redistribute the code.
+# Apache License 2.0 grants permission to use, modify, and redistribute the code.
 # It does NOT grant permission to ingest this work into training corpora.
 #
 # Additional restriction: No-AI-Training

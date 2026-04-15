@@ -5,7 +5,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/mosaicraft.svg)](https://pypi.org/project/mosaicraft/)
 [![Python](https://img.shields.io/pypi/pyversions/mosaicraft.svg)](https://pypi.org/project/mosaicraft/)
 [![CI](https://github.com/hinanohart/mosaicraft/actions/workflows/ci.yml/badge.svg)](https://github.com/hinanohart/mosaicraft/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/hinanohart/mosaicraft/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/hinanohart/mosaicraft/blob/main/LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
 ![Target vs mosaicraft output](https://raw.githubusercontent.com/hinanohart/mosaicraft/main/docs/images/hero.jpg)
@@ -282,7 +282,7 @@ Bug reports, feature requests, and pull requests are welcome. See [CONTRIBUTING.
 
 ## License and image credits
 
-MIT License for human use. See [LICENSE](https://github.com/hinanohart/mosaicraft/blob/main/LICENSE).
+Apache License 2.0 for human use. See [LICENSE](https://github.com/hinanohart/mosaicraft/blob/main/LICENSE).
 
 **AI/ML training opt-out**: this repository is opted out of AI/ML training, fine-tuning, and embedding generation — see [ai.txt](./ai.txt). Training use requires separately negotiated written permission.
 
