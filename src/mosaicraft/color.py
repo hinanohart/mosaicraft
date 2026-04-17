@@ -192,30 +192,13 @@ def _mkl_transform(a_cov: NDArray, b_cov: NDArray) -> NDArray:
     return ua @ da_inv @ uc @ np.diag(dc) @ uc.T @ da_inv @ ua.T
 
 
-def mkl_transfer(
-    tile_bgr: NDArray,
-    target_bgr: NDArray,
-    strength: float = 0.55,
-    adaptive: bool = True,
-    adaptive_scale: float = 30.0,
-) -> NDArray:
+def mkl_transfer(tile_bgr: NDArray, target_bgr: NDArray, strength: float = 0.55) -> NDArray:
     """MKL optimal transport color transfer in CIELAB.
 
     Preserves the *shape* of the source color distribution while shifting
     its first and second moments to match the target. This produces more
     vivid and natural results than pure Reinhard for chromatically distant
     images.
-
-    When ``adaptive`` is True (default), the blend strength is smoothly
-    raised toward 1.0 for **flat, chromatically-distant** target cells —
-    the regime where a halfway transfer leaves mid-gray tiles in regions
-    the eye expects to be a solid colour (e.g. a white background or a
-    saturated-hue illustration patch). Textured cells (faces, fabric,
-    foliage) stay near ``strength`` so tile identity is preserved.
-
-    The boost factor is ``mean_distance * (1 - normalized_target_std)``,
-    passed through ``exp(-d/adaptive_scale)``. Set ``adaptive=False`` for
-    the pre-v0.4 behaviour.
     """
     tile_lab = cv2.cvtColor(tile_bgr, cv2.COLOR_BGR2LAB).astype(np.float64)
     target_lab = cv2.cvtColor(target_bgr, cv2.COLOR_BGR2LAB).astype(np.float64)
@@ -226,14 +209,6 @@ def mkl_transfer(
     t = _mkl_transform(a_cov, b_cov)
     src_mean = src.mean(axis=0)
     tgt_mean = tgt.mean(axis=0)
-    if adaptive and strength < 1.0:
-        d = float(np.linalg.norm(tgt_mean - src_mean))
-        # Target-cell flatness: 0 for textured cells, 1 for perfectly flat.
-        # Normalize L/a/b std by a rough 20-unit reference.
-        tgt_std = float(np.linalg.norm(tgt.std(axis=0)))
-        flatness = float(np.clip(1.0 - tgt_std / 20.0, 0.0, 1.0))
-        boost = 1.0 - float(np.exp(-d * flatness / max(adaptive_scale, EPS)))
-        strength = strength + (1.0 - strength) * boost
     transferred = (src - src_mean) @ np.real(t) + tgt_mean
     result = src * (1 - strength) + transferred * strength
     result_lab = np.clip(result, 0, 255).astype(np.uint8).reshape(tile_lab.shape)
