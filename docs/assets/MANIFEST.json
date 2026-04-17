@@ -12,17 +12,6 @@
       "source_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/Meisje_met_de_parel.jpg/2048px-Meisje_met_de_parel.jpg",
       "title": "Girl with a Pearl Earring",
       "year": "c. 1665"
-    },
-    {
-      "artist": "SSS LLC / Tohoku Zunko Project",
-      "committed": true,
-      "license": "Tohoku Zunko Guidelines (https://zunko.jp/guideline.html)",
-      "path": "paintings/zundamon.jpg",
-      "sha256": "70990c8b40b9081f3f0f8ee354d98275e37037c286ad8708738563a6ac0f84ae",
-      "size_bytes": 79541,
-      "source_page": "https://zunko.jp/guideline.html",
-      "title": "Zundamon (illustration)",
-      "year": "2024"
     }
   ],
   "schema_version": 1,

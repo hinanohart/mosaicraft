@@ -80,10 +80,8 @@ hq_cache/
 *_cache/
 
 # Downloadable demo assets — reproducible via docs/assets/MANIFEST.json
-# (MANIFEST.json itself is committed; downloaded images are not.
-#  zundamon.jpg is committed as a repository asset — see negation below.)
-docs/assets/paintings/*
-!docs/assets/paintings/zundamon.jpg
+# (MANIFEST.json itself is committed; downloaded images are not.)
+docs/assets/paintings/
 docs/assets/tiles/
 docs/assets/bench_outputs/
 

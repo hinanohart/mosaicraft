@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """Generate README figures for mosaicraft.
 
-Loads demo target images (public-domain paintings from Wikimedia Commons
-and licensed character art) plus a CC0 tile pool from picsum.photos
-(bootstrapped by ``scripts/download_demo_assets.py``), then renders
-mosaics with several presets and composites the README comparison figures
-into ``docs/images/``.
+Loads demo target images (public-domain paintings from Wikimedia Commons)
+plus a CC0 tile pool from picsum.photos (bootstrapped by
+``scripts/download_demo_assets.py``), then renders mosaics with several
+presets and composites the README comparison figures into
+``docs/images/``.
 
 Every source image is freely redistributable:
 
 * Paintings — public domain (pre-1929, Wikimedia Commons)
-* Zundamon  — Tohoku Zunko Guidelines (committed in repo)
 * Tiles     — CC0 / Unsplash License via picsum.photos
 
 Usage::
@@ -20,7 +19,7 @@ Usage::
 
     # then render figures
     python scripts/generate_readme_figures.py
-    python scripts/generate_readme_figures.py --target pearl_earring  # or --target zundamon
+    python scripts/generate_readme_figures.py --target pearl_earring
     python scripts/generate_readme_figures.py --quick  # fewer cells, faster iteration
 """
 
@@ -57,7 +56,6 @@ MANIFEST_PATH = ASSETS_DIR / "MANIFEST.json"
 # ``scripts/download_demo_assets.py``'s ``PAINTINGS`` or ``COMMITTED_TARGETS`` list.
 TARGET_CHOICES = {
     "pearl_earring": "pearl_earring.jpg",
-    "zundamon": "zundamon.jpg",
 }
 
 
