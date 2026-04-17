@@ -9,13 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-* README demo targets reduced from four public-domain paintings to
-  Vermeer's *Girl with a Pearl Earring* + a Zundamon illustration,
-  showing the pipeline works on both fine art and modern illustrations.
-* Zundamon target image (`docs/assets/paintings/zundamon.jpg`, 79 KB)
-  is now committed to the repository so `generate_readme_figures.py`
-  can reproduce the target comparison figure without manual setup.
-  Used under the [Tohoku Zunko Guidelines](https://zunko.jp/guideline.html).
+* README demo target reduced to Vermeer's *Girl with a Pearl Earring*.
 
 ### Removed
 
