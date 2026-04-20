@@ -52,7 +52,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-faiss = ["faiss-cpu>=1.7"]
+faiss = ["faiss-cpu>=1.13.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
