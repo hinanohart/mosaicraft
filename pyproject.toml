@@ -47,7 +47,7 @@ dependencies = [
     # supply-chain hole for downstream users with reproducible lockfiles.
     "numpy>=1.23.5",
     "opencv-python>=4.8.1.78",
-    "scipy>=1.10.1",
+    "scipy>=1.13.1",
     "scikit-image>=0.21",
 ]
 
