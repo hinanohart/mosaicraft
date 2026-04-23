@@ -54,13 +54,13 @@ dependencies = [
 [project.optional-dependencies]
 faiss = ["faiss-cpu>=1.7"]
 dev = [
-    "pytest>=7.0",
-    "pytest-cov>=4.0",
-    "ruff>=0.5",
-    "mypy>=1.5",
-    "bandit>=1.7",
-    "build>=1.0",
-    "twine>=4.0",
+    "pytest>=8.4.2",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.11",
+    "mypy>=1.19.1",
+    "bandit>=1.8.6",
+    "build>=1.4.4",
+    "twine>=6.2.0",
 ]
 
 [project.urls]
